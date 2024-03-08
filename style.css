@@ -1,0 +1,83 @@
+/* Basic reset for margins and paddings */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  text-align: center;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f0f0f0;
+  color: #333;
+  padding: 20px;
+}
+
+.header {
+  margin-top: 20px;
+  margin-bottom: 40px;
+}
+
+.nav, .bottom-links, .middle-content {
+  margin-top: 30px;
+  margin-bottom: 20px;
+  padding: 10px 0;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.nav a, .bottom-links a {
+  margin: 0 15px;
+  text-decoration: none;
+  color: #007bff;
+  font-weight: 500;
+}
+
+.middle-content {
+  font-size: 16px;
+  color: #666;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+.footer {
+  font-size: 14px;
+  color: #aaa;
+  margin-top: 40px;
+}
+
+.disclaimer {
+  font-size: 12px;
+  color: #999;
+  margin-top: 20px;
+}
+
+/* Hover effects for links */
+.nav a:hover, .bottom-links a:hover {
+  color: #0056b3;
+  text-decoration: underline;
+}
+
+/* Logo and Header Styling */
+img {
+  border-radius: 50%;
+  margin-bottom: 20px;
+}
+
+h1 {
+  font-size: 24px;
+  color: #333;
+}
+
+/* Additional styling for responsiveness and aesthetics */
+@media (max-width: 768px) {
+  .nav a, .bottom-links a {
+    margin: 0 10px;
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  .nav, .bottom-links, .middle-content {
+    padding: 20px;
+  }
+}
