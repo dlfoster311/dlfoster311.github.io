@@ -1,6 +1,6 @@
 # OpenCola
 
-![OpenCola logo](url-to-logo-image)
+![OpenCola logo](opencola-logo.png)
 
 Coming March 2024
 
