@@ -81,3 +81,22 @@ h1 {
     padding: 20px;
   }
 }
+
+/* Dark Mode Styles */
+.dark-mode {
+  background-color: #121212;
+  color: #ffffff;
+}
+
+.dark-mode .nav, .dark-mode .bottom-links, .dark-mode .middle-content {
+  background-color: #333;
+  color: #ffffff;
+}
+
+.dark-mode .nav a, .dark-mode .bottom-links a {
+  color: #0099ff;
+}
+
+.dark-mode img {
+  border-color: #ffffff;
+}
