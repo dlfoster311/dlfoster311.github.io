@@ -38,7 +38,7 @@ body {
   color: #666;
   margin-top: 20px;
   margin-bottom: 20px;
-  animation: fadeIn .5s; /* Apply fade-in animation */
+  animation: fadeIn 500ms; /* Apply fade-in animation */
 }
 
 .footer {
