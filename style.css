@@ -18,13 +18,12 @@ body {
   margin-bottom: 40px;
 }
 
-.bottom-links, .middle-content {
+.nav, .bottom-links, .middle-content {
   margin-top: 30px;
   margin-bottom: 20px;
   padding: 10px 0;
   background-color: #fff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  animation: fadeIn 2s; /* Apply fade-in animation */
 }
 
 .nav a, .bottom-links a {
@@ -39,6 +38,7 @@ body {
   color: #666;
   margin-top: 20px;
   margin-bottom: 20px;
+  animation: fadeIn 2s; /* Apply fade-in animation */
 }
 
 .footer {
@@ -83,7 +83,26 @@ h1 {
   }
 }
 
-/* Fade-in animation */
+/* Dark Mode Styles */
+.dark-mode {
+  background-color: #121212;
+  color: #ffffff;
+}
+
+.dark-mode .nav, .dark-mode .bottom-links, .dark-mode .middle-content {
+  background-color: #333;
+  color: #ffffff;
+}
+
+.dark-mode .nav a, .dark-mode .bottom-links a {
+  color: #0099ff;
+}
+
+.dark-mode img {
+  border-color: #ffffff;
+}
+
+/* Fade-in animation for .middle-content only */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
