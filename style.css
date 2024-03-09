@@ -24,6 +24,7 @@ body {
   padding: 10px 0;
   background-color: #fff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  animation: fadeIn 2s; /* Apply fade-in animation */
 }
 
 .nav a, .bottom-links a {
@@ -99,4 +100,10 @@ h1 {
 
 .dark-mode img {
   border-color: #ffffff;
+}
+
+/* Fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
