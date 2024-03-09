@@ -1,13 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCola</title>
 <link rel="stylesheet" href="style.css">
+<style>
+  body {
+    text-align: center;
+    font-family: Arial, sans-serif;
+  }
+  .header {
+    margin-top: 50px;
+  }
+  .footer {
+    margin-top: 100px;
+    font-size: 0.75em;
+  }
+  .nav, .bottom-links, .middle-content {
+    margin-top: 50px;
+  }
+  .nav a, .bottom-links a {
+    margin: 0 15px;
+    text-decoration: none;
+    color: black;
+  }
+  .disclaimer {
+    margin-top: 50px;
+    font-size: 0.75em;
+  }
+  /* Style for new middle content */
+  .middle-content {
+    font-size: 1em; /* Example font size, adjust as needed */
+  }
+</style>
+</head>
 <body>
-<div class="card">
+  <div class="header">
+    <img src="opencola-logo.png" alt="OpenCola logo" width="100" height="100" />
+    <h1>Coming March 2024</h1>
+  </div>
+  
+  <div class="nav">
+    <a href="#">Home</a> | 
+    <a href="#">Modpack</a> | 
+    <a href="server.html"><strong>Server</strong></a>
+  </div>
+  
+
+  <div class="middle-content">
+    <div class="card">
     <h2>Server Status</h2>
   </div>
   <div id="rest">Loading ...</div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+  </div>
+
+
+  <!-- New section for additional links -->
+  <div class="bottom-links">
+    <a href="#">About OpenCola</a> | 
+    <a href="#">FAQ</a> | 
+    <a href="#">Help</a> | 
+    <a href="#">Terms of Service</a> | 
+    <a href="#">Contact Us</a>
+  </div>
+  
+  <div class="footer">
+    © 2024 OpenCola
+  </div>
+  
+  <div class="disclaimer">
+    OpenCola is not affiliated with, maintained, authorized, endorsed, or sponsored by Mojang, Microsoft, or any of their affiliates.
+  </div>
 <script src="main.js"></script>
 </body>
 </html>
