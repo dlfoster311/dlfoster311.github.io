@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Camera Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-left">
+      <h1>Camera Dashboard</h1>
+      <span class="connection-status" id="globalStatus">● No cameras</span>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-icon" id="btnSetup" title="Setup Guide">?</button>
+      <button class="btn btn-icon" id="btnSettings" title="Settings">&#9881;</button>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="layout-toggles">
+      <button class="layout-btn active" data-layout="1">1&#215;1</button>
+      <button class="layout-btn" data-layout="2">2&#215;2</button>
+      <button class="layout-btn" data-layout="3">1+3</button>
+    </div>
+    <div class="action-btns">
+      <button class="btn btn-primary" id="btnConnectAll">Connect All</button>
+      <button class="btn btn-secondary" id="btnDisconnectAll">Disconnect All</button>
+    </div>
+  </div>
+
+  <div class="camera-grid layout-1" id="cameraGrid"></div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="btn btn-icon" id="btnCloseSettings">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="go2rtcHost">go2rtc Server Address</label>
+          <input type="text" id="go2rtcHost" placeholder="192.168.1.100:1984" />
+          <p class="hint">IP address and port of your go2rtc instance (running on your local network)</p>
+        </div>
+        <div class="form-group">
+          <label>Cameras</label>
+          <div id="cameraList"></div>
+          <button class="btn btn-secondary" id="btnAddCamera" style="margin-top:8px">+ Add Camera</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveSettings">Save &amp; Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Setup Guide Modal -->
+  <div class="modal-overlay" id="setupModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2>Setup Guide</h2>
+        <button class="btn btn-icon" id="btnCloseSetup">&#10005;</button>
+      </div>
+      <div class="modal-body setup-guide">
+
+        <div class="callout callout-blue">
+          <strong>Recommended: Frigate NVR</strong> &mdash; If you want a full-featured solution with smart
+          detection, recording, zones, and notifications, use
+          <a href="https://frigate.video" target="_blank">Frigate</a> instead.
+          It runs locally, actually distinguishes cats from raccoons, and lets you mask areas like wind chimes.
+          This dashboard is the lightweight alternative if you just want to view streams.
+        </div>
+
+        <h3>Using This Dashboard</h3>
+        <p>This dashboard uses <strong>go2rtc</strong> to convert your Wyze RTSP streams into WebRTC
+        so they play directly in the browser — no cloud, no subscription.</p>
+
+        <h4>Step 1: Enable RTSP on Each Wyze Camera</h4>
+        <ol>
+          <li>Open the <strong>Wyze app</strong> &rarr; tap your camera</li>
+          <li>Go to <strong>Settings</strong> &rarr; <strong>Advanced Settings</strong> &rarr; <strong>RTSP</strong></li>
+          <li>Tap <strong>Enable RTSP</strong> and note the URL it shows you</li>
+          <li>URL format: <code>rtsp://username:password@192.168.1.x/live</code></li>
+        </ol>
+        <p class="hint">Note: RTSP requires Wyze firmware that supports it. Some newer cameras need the beta RTSP firmware.</p>
+
+        <h4>Step 2: Install go2rtc</h4>
+        <p>Download the binary for your OS from the
+        <a href="https://github.com/AlexxIT/go2rtc/releases" target="_blank">go2rtc releases page</a>.
+        It runs as a single executable with no dependencies.</p>
+
+        <h4>Step 3: Create go2rtc Config</h4>
+        <p>Create a file called <code>go2rtc.yaml</code> in the same folder as the binary:</p>
+        <pre><code>streams:
+  front_door: rtsp://wyzeuser:wyzepass@192.168.1.101/live
+  backyard:   rtsp://wyzeuser:wyzepass@192.168.1.102/live
+
+api:
+  listen: :1984
+  origin: "*"   # Required for browser access from this dashboard</code></pre>
+
+        <h4>Step 4: Run go2rtc</h4>
+        <pre><code># Linux / macOS
+./go2rtc
+
+# Windows
+go2rtc.exe
+
+# Docker
+docker run -d --name go2rtc \
+  -p 1984:1984 \
+  -v ./go2rtc.yaml:/config/go2rtc.yaml \
+  alexxit/go2rtc</code></pre>
+
+        <h4>Step 5: Open This Dashboard</h4>
+        <p>You need to serve this page over HTTP (not file://) so WebRTC works:</p>
+        <pre><code># From the cameras/ folder (Python 3)
+python3 -m http.server 8080
+
+# Then open: http://localhost:8080</code></pre>
+        <p>Or put these files in go2rtc's <code>www/</code> folder and it will serve them automatically
+        at <code>http://your-server:1984</code>.</p>
+
+        <h4>Step 6: Configure This Dashboard</h4>
+        <ol>
+          <li>Click <strong>&#9881; Settings</strong></li>
+          <li>Set <strong>go2rtc Server Address</strong> to your server&rsquo;s IP (e.g. <code>192.168.1.100:1984</code>)</li>
+          <li>Add each camera: give it a name and set the stream ID to match what&rsquo;s in your <code>go2rtc.yaml</code></li>
+          <li>Click <strong>Save &amp; Apply</strong>, then <strong>Connect All</strong></li>
+        </ol>
+
+        <h3>Frigate vs This Dashboard</h3>
+        <table class="compare-table">
+          <thead>
+            <tr><th></th><th>This Dashboard</th><th>Frigate NVR</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Live viewing</td><td>&#10003;</td><td>&#10003;</td></tr>
+            <tr><td>Recording / clips</td><td>&#10007;</td><td>&#10003;</td></tr>
+            <tr><td>AI detection (person/car/pet)</td><td>&#10007;</td><td>&#10003;</td></tr>
+            <tr><td>Motion zones (ignore wind chimes)</td><td>&#10007;</td><td>&#10003;</td></tr>
+            <tr><td>Smart alerts</td><td>&#10007;</td><td>&#10003;</td></tr>
+            <tr><td>Home Assistant</td><td>&#10007;</td><td>&#10003;</td></tr>
+            <tr><td>Resource usage</td><td>Very low</td><td>Moderate</td></tr>
+            <tr><td>Setup complexity</td><td>Simple</td><td>Moderate</td></tr>
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
