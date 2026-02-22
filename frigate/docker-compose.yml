@@ -98,6 +98,7 @@ services:
     environment:
       NTFY_CACHE_FILE:            /var/cache/ntfy/cache.db
       NTFY_ATTACHMENT_CACHE_DIR:  /var/cache/ntfy/attachments
+      NTFY_CACHE_DURATION:        "168h"   # keep notification history for 7 days
       NTFY_BASE_URL:              "${NTFY_BASE_URL:-http://localhost:8080}"
 
   # ── Notification bridge ──────────────────────────────────────────────────────
