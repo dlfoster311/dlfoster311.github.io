@@ -1,13 +1,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  Frigate config.yml  —  Wyze 2-camera setup
+#  Frigate config.yml  —  4-camera setup
 #
-#  Things you MUST change before starting:
-#    1. Camera RTSP URLs (search for YOUR_CAMERA_IP below)
-#    2. Camera resolution — check your Wyze cam's actual resolution
+#  DO NOT edit camera IPs or credentials here.
+#  Run ./setup.sh — it writes a .env file and updates this config automatically.
 #
-#  Things you'll probably want to tune after first run:
-#    3. Motion masks — draw them in the Frigate UI, paste coords here
-#    4. Object thresholds — raise if you get too many false detections
+#  Things to tune after first run (in the Frigate web UI, then paste here):
+#    1. Motion masks — draw over wind chimes, trees, shadows
+#    2. Zones — define your driveway, porch, yard areas
+#    3. Object thresholds — raise min_score if getting false positives
 #
 #  Full reference docs: https://docs.frigate.video/configuration
 # ─────────────────────────────────────────────────────────────────────────────
@@ -25,15 +25,15 @@ mqtt:
 
 
 # ── Detector ─────────────────────────────────────────────────────────────────
-# CPU detection works on any machine. It's slower than a Coral TPU but totally
-# fine for 2 cameras at 5 fps.
+# CPU detection works on any machine. For 4 cameras at 5fps, a modern desktop
+# handles it fine. A Coral USB TPU (~$60) makes it ~10x faster if you want it.
 #
 # If you buy a Google Coral USB (~$60): change type to "edgetpu" and
 # uncomment the device line. Detection will be ~10x faster.
 detectors:
   cpu1:
     type: cpu
-    num_threads: 3   # increase to 4-6 if your CPU has extra cores
+    num_threads: 4   # 4 threads for 4 cameras; raise to 6 if your CPU has spare cores
 
   # ── Coral USB TPU (uncomment to use) ──
   # coral:
@@ -60,13 +60,18 @@ detectors:
 go2rtc:
   streams:
 
+    # Camera IPs and credentials come from .env — setup.sh fills these in.
     front_door:
-      # ⚠️  Replace with your actual camera IP
-      - rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@YOUR_CAMERA_IP_1/live
+      - "rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAM1_IP}{FRIGATE_RTSP_PATH}"
 
     backyard:
-      # ⚠️  Replace with your actual camera IP
-      - rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@YOUR_CAMERA_IP_2/live
+      - "rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAM2_IP}{FRIGATE_RTSP_PATH}"
+
+    front_yard:
+      - "rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAM3_IP}{FRIGATE_RTSP_PATH}"
+
+    side_yard:
+      - "rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAM4_IP}{FRIGATE_RTSP_PATH}"
 
 
 # ── Default settings (applied to every camera unless overridden) ─────────────
@@ -78,10 +83,12 @@ cameras_default: &camera_defaults
 
     # Hardware acceleration for decoding — improves CPU usage significantly.
     # Comment out if you have problems; plain CPU decode still works fine.
-    hwaccel_args: preset-rpi-64-h264  # Raspberry Pi 4/5
-    # hwaccel_args: preset-intel-qsv-h264   # Intel Quick Sync
-    # hwaccel_args: preset-nvidia-h264       # NVIDIA GPU
-    # hwaccel_args: []                       # CPU only (no acceleration)
+    # Hardware acceleration — setup.sh sets this automatically based on your GPU.
+    # Default is CPU-only (works on everything). Change to a preset if you have a GPU:
+    #   preset-intel-qsv-h264  (Intel integrated graphics)
+    #   preset-nvidia-h264      (NVIDIA GPU)
+    #   preset-rpi-64-h264      (Raspberry Pi 4/5)
+    hwaccel_args: []
 
   detect:
     enabled: true
@@ -167,47 +174,31 @@ cameras_default: &camera_defaults
 
 
 # ── Cameras ───────────────────────────────────────────────────────────────────
+# Camera names and IPs are set by setup.sh.
+# Draw zones in the Frigate UI, then paste the coordinates into each camera below.
+# HOW: Frigate UI → camera → Zones tab → draw polygon → copy coordinates
 cameras:
 
   front_door:
-    <<: *camera_defaults   # inherit all the defaults above
+    <<: *camera_defaults
 
     ffmpeg:
       inputs:
-        # go2rtc re-streams your camera at this internal address.
-        # "detect" role = send frames to the AI detector.
-        # "record" role = save continuous/event recordings.
         - path: rtsp://127.0.0.1:8554/front_door
-          roles:
-            - detect
-            - record
+          roles: [detect, record]
 
-    # ── Zones ────────────────────────────────────────────────────────────────
-    # Zones let you limit alerts to specific areas of the frame, or alert
-    # only when an object enters/exits a zone.
-    #
-    # HOW TO GET COORDINATES:
-    #   Frigate UI → front_door camera → Zones → draw your zone → copy coords
-    #
-    # Example: only alert on people in the driveway, not the street
     zones:
-      driveway:
-        # Replace with real coordinates drawn in the Frigate UI
-        coordinates: 0,1080,1920,1080,1920,400,0,400   # lower portion of frame
-        objects:
-          - person
-          - car
-      porch:
-        coordinates: 600,1080,1320,1080,1320,600,600,600
-        objects:
-          - person
+      # Paste driveway/porch zone coordinates from Frigate UI here.
+      # driveway:
+      #   coordinates: 0,1080,1920,1080,1920,400,0,400
+      #   objects: [person, car]
+      # porch:
+      #   coordinates: 600,1080,1320,1080,1320,600,600,600
+      #   objects: [person]
 
-    # ── Per-camera motion mask override (wind chimes, shadows) ───────────────
-    # If the wind chimes are only visible on this camera, add a mask here
-    # instead of (or in addition to) the default above.
     # motion:
     #   mask:
-    #     - x1,y1,x2,y2,x3,y3,...   ← paste coordinates from Frigate UI
+    #     - x1,y1,x2,y2,...   ← draw in Frigate UI, paste coordinates here
 
 
   backyard:
@@ -216,18 +207,49 @@ cameras:
     ffmpeg:
       inputs:
         - path: rtsp://127.0.0.1:8554/backyard
-          roles:
-            - detect
-            - record
+          roles: [detect, record]
 
     zones:
-      yard:
-        coordinates: 0,1080,1920,1080,1920,0,0,0   # full frame — refine in UI
-        objects:
-          - person
-          - cat
-          - dog
+      # yard:
+      #   coordinates: 0,1080,1920,1080,1920,0,0,0
+      #   objects: [person, cat, dog]
 
     # motion:
     #   mask:
-    #     - x1,y1,x2,y2,...   ← add backyard-specific masks here
+    #     - x1,y1,x2,y2,...
+
+
+  front_yard:
+    <<: *camera_defaults
+
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/front_yard
+          roles: [detect, record]
+
+    zones:
+      # front_yard_zone:
+      #   coordinates: 0,1080,1920,1080,1920,0,0,0
+      #   objects: [person, car]
+
+    # motion:
+    #   mask:
+    #     - x1,y1,x2,y2,...
+
+
+  side_yard:
+    <<: *camera_defaults
+
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/side_yard
+          roles: [detect, record]
+
+    zones:
+      # side_zone:
+      #   coordinates: 0,1080,1920,1080,1920,0,0,0
+      #   objects: [person]
+
+    # motion:
+    #   mask:
+    #     - x1,y1,x2,y2,...

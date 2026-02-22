@@ -38,15 +38,14 @@ detect:
   unknown:
     save: true                  # save unrecognized faces — useful for training
 
-# Add your camera names here. Must exactly match the camera names in
-# Frigate's config/config.yml.
+# Camera names must exactly match Frigate's config/config.yml.
+# setup.sh keeps these in sync automatically.
 cameras:
-  # Example entries — uncomment and rename to match your Frigate cameras:
-  # front_door:
-  #   zones: []              # empty list = check full frame
-  #                          # or restrict to specific zones:
-  #                          # zones: [driveway, front_porch]
-  # back_yard:
-  #   zones: []
-  # garage:
-  #   zones: []
+  front_door:
+    zones: []
+  backyard:
+    zones: []
+  front_yard:
+    zones: []
+  side_yard:
+    zones: []
