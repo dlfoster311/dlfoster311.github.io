@@ -157,6 +157,8 @@ NUM_CAMS="${NUM_CAMS:-2}"
 
 declare -a CAM_IPS=()
 declare -a CAM_NAMES=()
+declare -a CAM_PTZES=()   # "y" or "n" for each camera
+HAS_PTZ=false
 DEFAULT_NAMES=("front_door" "backyard" "garage" "side_yard")
 DEFAULT_LABELS=("Front Door / Driveway" "Backyard" "Garage" "Side Yard")
 
@@ -188,6 +190,16 @@ for (( i=0; i<NUM_CAMS; i++ )); do
       warn "    That doesn't look like a valid IP. Try again (format: 192.168.1.100)"
     fi
   done
+
+  # PTZ
+  ask "    Pan/tilt camera (Wyze Pan Cam — can physically rotate)? [y/N]:"
+  read -rp "    > " IS_PTZ
+  IS_PTZ="${IS_PTZ:-n}"
+  CAM_PTZES+=("$IS_PTZ")
+  if [[ "$IS_PTZ" =~ ^[Yy] ]]; then
+    HAS_PTZ=true
+    ok "    PTZ enabled — Frigate will auto-track people on this camera"
+  fi
 done
 
 # ── Step 4: GPU / hardware acceleration ──────────────────────────────────────
@@ -273,7 +285,9 @@ echo "    RTSP user:     $RTSP_USER"
 echo "    RTSP path:     $RTSP_PATH"
 echo "    Cameras:"
 for (( i=0; i<NUM_CAMS; i++ )); do
-  printf "      %s  →  %s\n" "${CAM_NAMES[$i]}" "${CAM_IPS[$i]}"
+  PTZ_LABEL=""
+  [[ "${CAM_PTZES[$i]}" =~ ^[Yy] ]] && PTZ_LABEL="  (pan/tilt + autotracking)"
+  printf "      %-18s  →  %s%s\n" "${CAM_NAMES[$i]}" "${CAM_IPS[$i]}" "$PTZ_LABEL"
 done
 [[ -n "$HW_ACCEL" ]] && echo "    GPU accel:     $HW_ACCEL" || echo "    GPU accel:     CPU only"
 echo "    Storage:       $STORAGE_PATH"
@@ -310,6 +324,13 @@ for (( i=NUM_CAMS; i<4; i++ )); do
   echo "CAM$((i+1))_IP=" >> .env
 done
 
+# PTZ flags (used by config generation below)
+echo "" >> .env
+echo "# ── PTZ auto-tracking ────────────────────────────────────────────────────────" >> .env
+for (( i=0; i<NUM_CAMS; i++ )); do
+  echo "CAM$((i+1))_PTZ=${CAM_PTZES[$i]}" >> .env
+done
+
 cat >> .env << EOF
 
 # ── Notifications ─────────────────────────────────────────────────────────────
@@ -331,23 +352,29 @@ ok ".env written"
 info "Updating Frigate config..."
 
 # Regenerate the go2rtc streams and cameras sections for the actual camera names
+CAM_PTZES_STR="${CAM_PTZES[*]}"   # "y n y n" etc.
 python3 - << PYEOF
 import re
 
 with open('config/config.yml', 'r') as f:
     content = f.read()
 
-cam_names = ${CAM_NAMES[@]@Q}
-cam_count = $NUM_CAMS
+cam_names_raw  = "${CAM_NAMES[*]}"
+cam_ptzes_raw  = "${CAM_PTZES_STR}"
+cam_count      = $NUM_CAMS
 
-# Build new go2rtc streams section
+cam_names_list = cam_names_raw.split()
+cam_ptzes_list = cam_ptzes_raw.split() if cam_ptzes_raw.strip() else []
+
+def is_ptz(i):
+    return i < len(cam_ptzes_list) and cam_ptzes_list[i].lower() in ('y', 'yes')
+
+# ── go2rtc streams ──────────────────────────────────────────────────────────
 streams = "go2rtc:\n  streams:\n\n    # Camera IPs come from .env — no editing needed.\n"
-for i, name in enumerate(cam_names.split()):
-    name = name.strip("'")
+for i, name in enumerate(cam_names_list):
     streams += f"    {name}:\n"
     streams += f'      - "rtsp://{{FRIGATE_RTSP_USER}}:{{FRIGATE_RTSP_PASSWORD}}@{{FRIGATE_CAM{i+1}_IP}}{{FRIGATE_RTSP_PATH}}"\n\n'
 
-# Replace go2rtc block (from "go2rtc:" to the next top-level section)
 content = re.sub(
     r'^go2rtc:.*?(?=^[a-z])',
     streams + "\n",
@@ -355,34 +382,46 @@ content = re.sub(
     flags=re.MULTILINE | re.DOTALL
 )
 
-# Build new cameras section
+# ── cameras section ──────────────────────────────────────────────────────────
 cam_section = "# ── Cameras ───────────────────────────────────────────────────────────────────\ncameras:\n\n"
-for i, name in enumerate(cam_names.split()):
-    name = name.strip("'")
-    is_last = (i == cam_count - 1)
+
+for i, name in enumerate(cam_names_list):
+    ptz = is_ptz(i)
+
     cam_section += f"  {name}:\n"
     cam_section += "    <<: *camera_defaults\n\n"
     cam_section += "    ffmpeg:\n"
     cam_section += "      inputs:\n"
     cam_section += f"        - path: rtsp://127.0.0.1:8554/{name}\n"
-    cam_section += "          roles:\n"
-    cam_section += "            - detect\n"
-    cam_section += "            - record\n\n"
-    cam_section += "    zones:\n"
-    if i == 0:
-        cam_section += "      # Draw zones in the Frigate UI then paste coordinates here.\n"
-        cam_section += "      # Example: driveway or front_porch zone\n"
+    cam_section += "          roles: [detect, record]\n\n"
+
+    if ptz:
+        # ONVIF PTZ control — Wyze Pan Cam uses port 2020 (not the ONVIF standard 80)
+        cam_section += "    onvif:\n"
+        cam_section += f"      host: {{FRIGATE_CAM{i+1}_IP}}\n"
+        cam_section += "      port: 2020\n"
+        cam_section += "      user: \"{FRIGATE_RTSP_USER}\"\n"
+        cam_section += "      password: \"{FRIGATE_RTSP_PASSWORD}\"\n\n"
+        # Frigate autotracking — moves the camera to follow detected people
+        cam_section += "    autotracking:\n"
+        cam_section += "      enabled: true\n"
+        cam_section += "      calibrate_on_startup: true   # finds pan/tilt limits on first start\n"
+        cam_section += "      zooming: disabled             # Wyze Pan has no optical zoom\n"
+        cam_section += "      track:\n"
+        cam_section += "        - person\n"
+        cam_section += "      timeout: 10                  # seconds idle before returning home\n"
+        cam_section += "      # return_preset: home        # uncomment after setting a 'home' preset in Frigate UI\n\n"
+        cam_section += "    zones:\n"
+        cam_section += "      # Note: zones are less reliable with PTZ cameras because the\n"
+        cam_section += "      # field of view shifts as the camera tracks. Alert on full-frame\n"
+        cam_section += "      # detections, or set REQUIRE_ZONE=false in .env for PTZ cameras.\n\n\n"
+    else:
+        cam_section += "    zones:\n"
+        cam_section += "      # Draw zones in the Frigate UI, then paste coordinates here.\n"
         cam_section += "      # driveway:\n"
         cam_section += "      #   coordinates: 0,1080,1920,1080,1920,400,0,400\n"
-        cam_section += "      #   objects: [person, car]\n"
-    else:
-        cam_section += "      # yard:\n"
-        cam_section += "      #   coordinates: 0,1080,1920,1080,1920,0,0,0\n"
-        cam_section += "      #   objects: [person]\n"
-    if not is_last:
-        cam_section += "\n\n"
+        cam_section += "      #   objects: [person, car]\n\n\n"
 
-# Replace cameras block
 content = re.sub(
     r'^# ── Cameras.*',
     cam_section,
@@ -517,6 +556,17 @@ echo "    In the ntfy app:"
 echo "      Settings → Default server → http://${TS_IP}:8080"
 echo "      Subscribe to topic: ${NTFY_TOPIC}"
 echo ""
+if [[ "$HAS_PTZ" == "true" ]]; then
+  echo -e "  ${CYAN}Pan/tilt auto-tracking${NC}"
+  echo "    Frigate will physically move your PTZ cameras to follow detected people."
+  echo ""
+  echo "    IMPORTANT — disable Wyze's built-in tracking to avoid conflicts:"
+  echo "      Wyze app → Camera → Settings → Detection Settings → Motion Tracking → Off"
+  echo ""
+  echo "    To set a 'home' position (where the camera returns after tracking):"
+  echo "      Frigate UI → PTZ → move camera to desired position → Save as preset 'home'"
+  echo ""
+fi
 echo -e "  ${CYAN}Next steps${NC}"
 echo "    1. Open Frigate → draw zones around your driveway/porch"
 echo "       (this limits alerts to areas you care about)"
