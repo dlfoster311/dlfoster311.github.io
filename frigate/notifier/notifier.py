@@ -11,6 +11,7 @@ Event routing:
 All settings are environment variables configured in docker-compose.yml.
 """
 
+import datetime
 import json
 import os
 import time
@@ -49,6 +50,28 @@ KNOWN_PEOPLE = {n.strip().lower() for n in _known_str.split(",") if n.strip()}
 
 # Set to "false" to suppress family arrival notifications entirely.
 FAMILY_ARRIVAL_ALERTS = os.getenv("FAMILY_ARRIVAL_ALERTS", "true").lower() == "true"
+
+# ── Quiet hours ───────────────────────────────────────────────────────────────
+# During quiet hours only urgent alerts fire (strangers + audio alarms).
+# Car detections, packages, family arrivals, and barking are suppressed.
+# Default: quiet from 10pm to 7am. Set to the same value to disable entirely.
+QUIET_START = int(os.getenv("QUIET_HOURS_START", "22"))   # 22 = 10pm
+QUIET_END   = int(os.getenv("QUIET_HOURS_END",   "7"))    #  7 = 7am
+
+# These event types always wake you regardless of quiet hours
+_ALWAYS_ALERT = {
+    "stranger", "glass_breaking", "screaming",
+    "fire_alarm", "smoke_detector_alarm",
+}
+
+
+def _in_quiet_hours() -> bool:
+    h = datetime.datetime.now().hour
+    if QUIET_START == QUIET_END:
+        return False            # same value = quiet hours disabled
+    if QUIET_START > QUIET_END:   # wraps midnight (22:00 → 07:00)
+        return h >= QUIET_START or h < QUIET_END
+    return QUIET_START <= h < QUIET_END
 
 # ── ntfy priority and tag mappings ────────────────────────────────────────────
 
@@ -176,6 +199,9 @@ def handle_frigate_event(payload: dict) -> None:
     if REQUIRE_ZONE and not zones:
         print(f"[skip] {camera}/{label}: not in any zone")
         return
+    if _in_quiet_hours() and label not in _ALWAYS_ALERT:
+        print(f"[skip] {camera}/{label}: quiet hours ({QUIET_START:02d}:00–{QUIET_END:02d}:00)")
+        return
 
     key = f"{camera}:{label}"
     if _in_cooldown(key):
@@ -242,6 +268,9 @@ def handle_face_event(topic: str, payload: dict) -> None:
 
         if not FAMILY_ARRIVAL_ALERTS:
             print(f"[known] {name} at {camera} — arrival alerts disabled")
+            return
+        if _in_quiet_hours():
+            print(f"[skip] face/{camera}/{name}: quiet hours — family arrival suppressed")
             return
 
         name_display = name.title()
@@ -339,6 +368,10 @@ def main() -> None:
     print(f"[config] Min object score:     {MIN_SCORE:.0%}")
     print(f"[config] Require zone:         {REQUIRE_ZONE}")
     print("[config] Audio alerts:        ", sorted(_AUDIO_ALERTS.keys()))
+    if QUIET_START != QUIET_END:
+        print(f"[config] Quiet hours:          {QUIET_START:02d}:00–{QUIET_END:02d}:00 (urgent alerts still fire)")
+    else:
+        print("[config] Quiet hours:          disabled")
     print(f"[config] Cooldown:             {COOLDOWN}s")
     print(f"[config] ntfy endpoint:        {NTFY_URL}/{NTFY_TOPIC}")
     print("=" * 60)

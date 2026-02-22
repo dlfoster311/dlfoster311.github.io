@@ -96,10 +96,11 @@ services:
     ports:
       - "8080:80"
     environment:
-      NTFY_CACHE_FILE:            /var/cache/ntfy/cache.db
-      NTFY_ATTACHMENT_CACHE_DIR:  /var/cache/ntfy/attachments
-      NTFY_CACHE_DURATION:        "168h"   # keep notification history for 7 days
-      NTFY_BASE_URL:              "${NTFY_BASE_URL:-http://localhost:8080}"
+      NTFY_CACHE_FILE:                /var/cache/ntfy/cache.db
+      NTFY_ATTACHMENT_CACHE_DIR:      /var/cache/ntfy/attachments
+      NTFY_CACHE_DURATION:            "168h"   # 7 days of notification history
+      NTFY_ATTACHMENT_EXPIRY_DURATION: "72h"   # keep digest images for 3 days
+      NTFY_BASE_URL:                  "${NTFY_BASE_URL:-http://localhost:8080}"
 
   # ── Notification bridge ──────────────────────────────────────────────────────
   notifier:
@@ -126,6 +127,28 @@ services:
       MIN_FACE_SCORE:       "0.80"
       KNOWN_PEOPLE:         "${KNOWN_PEOPLE:-}"
       FAMILY_ARRIVAL_ALERTS: "true"
+
+      # Suppress non-urgent alerts at night (strangers + alarms always fire)
+      QUIET_HOURS_START: "${QUIET_HOURS_START:-22}"   # 10pm
+      QUIET_HOURS_END:   "${QUIET_HOURS_END:-7}"      # 7am
+
+  # ── Daily digest — morning summary + ghost composite image ───────────────────
+  # Sends an 8am notification with yesterday's event counts and a ghost
+  # composite: all person detections from the day overlaid into one image.
+  # Edit DIGEST_HOUR in .env to change the time.
+  digest:
+    build: ./digest
+    container_name: frigate-digest
+    restart: unless-stopped
+    depends_on:
+      - frigate
+      - ntfy
+    environment:
+      FRIGATE_URL:   "${FRIGATE_URL:-http://frigate:5000}"
+      NTFY_URL:      "http://ntfy:80"
+      NTFY_TOPIC:    "${NTFY_TOPIC:-frigate-alerts}"
+      DIGEST_HOUR:   "${DIGEST_HOUR:-8}"
+      MAX_SNAPSHOTS: "20"
 
   # ── Scrypted — Apple HomeKit + Google Home ────────────────────────────────────
   # Setup at https://localhost:10443 → install Frigate NVR + HomeKit plugins
