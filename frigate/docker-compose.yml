@@ -132,6 +132,11 @@ services:
       QUIET_HOURS_START: "${QUIET_HOURS_START:-22}"   # 10pm
       QUIET_HOURS_END:   "${QUIET_HOURS_END:-7}"      # 7am
 
+      # Spatial awareness — proximity thresholds (fraction of frame height)
+      # close > 55% = right at camera, mid = 25–55%, far < 25% = street/edge
+      PROXIMITY_CLOSE: "${PROXIMITY_CLOSE:-0.55}"
+      PROXIMITY_MID:   "${PROXIMITY_MID:-0.25}"
+
   # ── Daily digest — morning summary + ghost composite image ───────────────────
   # Sends an 8am notification with yesterday's event counts and a ghost
   # composite: all person detections from the day overlaid into one image.
@@ -149,6 +154,35 @@ services:
       NTFY_TOPIC:    "${NTFY_TOPIC:-frigate-alerts}"
       DIGEST_HOUR:   "${DIGEST_HOUR:-8}"
       MAX_SNAPSHOTS: "20"
+      # Only use static cameras for the twin composite — exclude PTZ/pan cameras.
+      # Set to comma-separated camera names, e.g.: TWIN_CAMERAS=front_door,backyard
+      TWIN_CAMERAS:  "${TWIN_CAMERAS:-}"
+
+  # ── License plate recognition ─────────────────────────────────────────────────
+  # Reads plates from car events and sends an ntfy alert with the plate number.
+  # Free tier (2,500 reads/month): https://platerecognizer.com/sign-up/
+  # Set PLATE_RECOGNIZER_TOKEN in .env — leave empty to disable LPR.
+  lpr:
+    build: ./lpr
+    container_name: frigate-lpr
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - ntfy
+      - frigate
+    volumes:
+      - lpr-data:/data          # persists the plates.log between restarts
+    environment:
+      PLATE_RECOGNIZER_TOKEN: "${PLATE_RECOGNIZER_TOKEN:-}"
+      MQTT_HOST:   mosquitto
+      MQTT_PORT:   "1883"
+      NTFY_URL:    "http://ntfy:80"
+      NTFY_TOPIC:  "${NTFY_TOPIC:-frigate-alerts}"
+      FRIGATE_URL: "${FRIGATE_URL:-http://frigate:5000}"
+      LPR_OBJECTS: "car"
+      MIN_PLATE_CONFIDENCE: "0.80"
+      PLATE_COOLDOWN: "3600"          # 1 hour before re-alerting same plate
+      LPR_REGION: "${LPR_REGION:-}"   # optional region hint, e.g. us-ca, ca-on
 
   # ── Scrypted — Apple HomeKit + Google Home ────────────────────────────────────
   # Setup at https://localhost:10443 → install Frigate NVR + HomeKit plugins
@@ -159,3 +193,6 @@ services:
     network_mode: host
     volumes:
       - ./scrypted:/server/volume
+
+volumes:
+  lpr-data:

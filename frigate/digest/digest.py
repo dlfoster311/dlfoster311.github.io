@@ -2,12 +2,12 @@
 Daily digest service — sends a morning summary notification.
 
 Every day at DIGEST_HOUR (default 8am), fetches yesterday's events from
-Frigate and sends two notifications:
+Frigate and sends a notification with:
 
-  1. Text summary:  "14 people · 3 cars · 1 package  |  2 strangers"
-  2. Ghost composite image: every person snapshot from the day overlaid on
-     top of each other — you can see every position a person was detected,
-     making it look like there are multiple people in the yard at once.
+  1. Text summary:  "14 people · 3 cars · 1 package"
+  2. Twin composite image: every unique person position from the day cut out
+     at full opacity and pasted onto a single background frame — so it
+     literally looks like there are multiple clones of you in the yard.
      Falls back to a thumbnail grid if there are only 1-2 detections.
 
 Settings are all environment variables — no editing needed.
@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta
 
 import requests
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -27,7 +27,15 @@ FRIGATE_URL   = os.getenv("FRIGATE_URL",   "http://frigate:5000").rstrip("/")
 NTFY_URL      = os.getenv("NTFY_URL",      "http://ntfy:80").rstrip("/")
 NTFY_TOPIC    = os.getenv("NTFY_TOPIC",    "frigate-alerts")
 DIGEST_HOUR   = int(os.getenv("DIGEST_HOUR",   "8"))   # 8 = 8:00 AM local time
-MAX_SNAPSHOTS = int(os.getenv("MAX_SNAPSHOTS", "20"))  # cap for composite/grid
+MAX_SNAPSHOTS = int(os.getenv("MAX_SNAPSHOTS", "20"))  # cap for twin composite
+
+# TWIN_CAMERAS: comma-separated list of camera names to use for the twin
+# composite.  Only list static (non-pan) cameras here — if a PTZ/pan camera
+# is included the background shifts between snapshots and the composite looks
+# wrong.  Leave empty to use all cameras.
+# Example: TWIN_CAMERAS=front_door,backyard
+_twin_cams_raw = os.getenv("TWIN_CAMERAS", "")
+TWIN_CAMERAS   = {c.strip() for c in _twin_cams_raw.split(",") if c.strip()}
 
 # ── Frigate API ───────────────────────────────────────────────────────────────
 
@@ -46,10 +54,11 @@ def get_events(after: float, before: float) -> list[dict]:
 
 
 def fetch_snapshot(event_id: str) -> bytes | None:
+    """Full-frame snapshot, no bounding box drawn — clean for compositing."""
     try:
         resp = requests.get(
             f"{FRIGATE_URL}/api/events/{event_id}/snapshot.jpg",
-            params={"bbox": 0, "crop": 0},   # full frame, no crop — needed for ghost effect
+            params={"bbox": 0, "crop": 0},
             timeout=15,
         )
         resp.raise_for_status()
@@ -60,57 +69,91 @@ def fetch_snapshot(event_id: str) -> bytes | None:
 
 # ── Image generators ──────────────────────────────────────────────────────────
 
-def make_ghost_composite(snapshots: list[bytes]) -> bytes | None:
+def make_twin_composite(events: list[dict], snapshots: list[bytes]) -> bytes | None:
     """
-    Overlay every snapshot with transparency to create the ghost effect.
+    Full-opacity 'twins' composite.
 
-    Each frame is blended at low opacity so when you have 10 person
-    detections throughout the day, they all show up semi-transparently
-    in their positions — like a long-exposure photo of the yard.
+    Every unique person position is cropped out of its own snapshot and
+    pasted onto a shared background at 100% opacity.  The result looks like
+    multiple clones of the same person standing in the yard at once.
+
+    Algorithm:
+      1. Use the first snapshot as the background frame.
+      2. For each subsequent event, read the bounding box from the Frigate
+         event JSON (normalized [x_min, y_min, x_max, y_max] in 0-1 range).
+      3. Skip positions that are too close to an already-placed person so
+         we don't stack duplicates on top of each other.
+      4. Crop the person region (+ padding) from that event's snapshot.
+      5. Paste it onto the base at full opacity.
     """
-    if not snapshots:
+    pairs = [(e, s) for e, s in zip(events, snapshots) if s is not None]
+    if not pairs:
         return None
 
-    images = []
-    for data in snapshots:
+    # Background = first snapshot
+    try:
+        base = Image.open(io.BytesIO(pairs[0][1])).convert("RGB")
+    except Exception:
+        return None
+
+    W, H = base.size
+    placed: list[tuple[int, int]] = []   # centers of already-pasted crops
+
+    for event, snap_data in pairs[1:]:
+        box = event.get("box") or []
+        if len(box) < 4:
+            continue   # no bounding box — skip
+
         try:
-            images.append(Image.open(io.BytesIO(data)).convert("RGBA"))
-        except Exception:
-            continue
+            snap = Image.open(io.BytesIO(snap_data)).convert("RGB")
+            snap = snap.resize((W, H), Image.LANCZOS)
 
-    if not images:
-        return None
+            # Frigate stores box as [x_min, y_min, x_max, y_max] normalized
+            x1 = int(box[0] * W)
+            y1 = int(box[1] * H)
+            x2 = int(box[2] * W)
+            y2 = int(box[3] * H)
 
-    # Normalise size to the first image
-    w, h = images[0].size
-    images = [img.resize((w, h), Image.LANCZOS) for img in images]
+            # Guard against degenerate boxes
+            if x2 <= x1 or y2 <= y1:
+                continue
 
-    # Start from the first frame as the background
-    composite = images[0].copy()
+            cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
 
-    # Per-image alpha: fewer images → each one is more opaque so they're
-    # still visible; more images → lower alpha so they don't all wash out.
-    per_alpha = max(25, min(110, 180 // len(images)))
+            # Skip if another person is already pasted very close to here
+            # (threshold: 15% of frame width / height)
+            if any(
+                abs(cx - px) < W * 0.15 and abs(cy - py) < H * 0.15
+                for px, py in placed
+            ):
+                continue
 
-    for img in images[1:]:
-        r, g, b, a = img.split()
-        a = a.point(lambda x: int(x * per_alpha / 255))
-        overlay = Image.merge("RGBA", (r, g, b, a))
-        composite = Image.alpha_composite(composite, overlay)
+            # Add 15% padding around the bounding box so we include feet/head
+            pw = int((x2 - x1) * 0.15)
+            ph = int((y2 - y1) * 0.15)
+            x1, y1 = max(0, x1 - pw), max(0, y1 - ph)
+            x2, y2 = min(W, x2 + pw), min(H, y2 + ph)
 
-    # Stamp a label in the corner so it's clear what this is
-    draw = ImageDraw.Draw(composite)
-    label = "All detections — yesterday"
-    draw.text((12, 12), label, fill=(255, 255, 255, 180))
-    draw.text((11, 11), label, fill=(0, 0, 0, 120))  # shadow
+            person_crop = snap.crop((x1, y1, x2, y2))
+            base.paste(person_crop, (x1, y1))
+            placed.append((cx, cy))
+
+        except Exception as exc:
+            print(f"[digest] Composite paste error: {exc}")
+
+    # Label
+    draw = ImageDraw.Draw(base)
+    label = f"All {len(placed) + 1} positions — yesterday"
+    draw.text((14, 14), label, fill=(0,   0,   0  ))   # shadow
+    draw.text((12, 12), label, fill=(255, 255, 255))
 
     out = io.BytesIO()
-    composite.convert("RGB").save(out, format="JPEG", quality=85)
+    base.save(out, format="JPEG", quality=90)
     return out.getvalue()
 
 
 def make_snapshot_grid(snapshots: list[bytes]) -> bytes | None:
-    """Grid of event thumbnails — used when there are only 1-2 detections."""
+    """Thumbnail grid — fallback when there aren't enough unique positions."""
     if not snapshots:
         return None
 
@@ -152,8 +195,6 @@ def send_digest(title: str, body: str, image: bytes | None) -> None:
     }
     try:
         if image:
-            # PUT with binary body uploads the image directly to ntfy's
-            # attachment cache so the phone can fetch it over Tailscale.
             resp = requests.put(
                 f"{NTFY_URL}/{NTFY_TOPIC}",
                 data=image,
@@ -201,8 +242,8 @@ def run_digest() -> None:
     for ev in events:
         label = ev.get("label", "unknown")
         counts[label] = counts.get(label, 0) + 1
-        if label == "person":
-            stranger_count += 1   # will subtract known below (best estimate)
+        if label == "person" and not ev.get("sub_label"):
+            stranger_count += 1
 
     summary_parts = []
     for label, n in sorted(counts.items(), key=lambda x: -x[1]):
@@ -211,24 +252,38 @@ def run_digest() -> None:
 
     body_lines = [" · ".join(summary_parts)]
     if stranger_count > 0:
-        body_lines.append(f"  {stranger_count} unrecognized person{'s' if stranger_count > 1 else ''} — check Frigate for clips")
+        body_lines.append(
+            f"  {stranger_count} unrecognized person{'s' if stranger_count > 1 else ''}"
+            " — check Frigate for clips"
+        )
 
-    # ── Build ghost composite ────────────────────────────────────────────────
-    person_events = [e for e in events if e.get("label") == "person"]
-    # Best detections first (most confident = cleanest snapshot)
+    # ── Build twin composite ─────────────────────────────────────────────────
+    person_events = [
+        e for e in events
+        if e.get("label") == "person"
+        # Exclude pan/PTZ cameras — background shifts when camera moves, which
+        # breaks the composite.  Set TWIN_CAMERAS in .env to restrict to static
+        # cameras only (e.g. TWIN_CAMERAS=front_door,backyard).
+        and (not TWIN_CAMERAS or e.get("camera") in TWIN_CAMERAS)
+    ]
+
+    # Sort by score desc so we get the sharpest snapshots first; then
+    # the position-deduplication logic keeps the most spread-out set.
     person_events.sort(key=lambda e: e.get("top_score") or 0, reverse=True)
-    top = person_events[:MAX_SNAPSHOTS]
+    top_events = person_events[:MAX_SNAPSHOTS]
 
-    print(f"[digest] {len(events)} events total, downloading {len(top)} person snapshots ...")
-    snapshots = [s for e in top if (s := fetch_snapshot(e["id"])) is not None]
-    print(f"[digest] Got {len(snapshots)} snapshots")
+    print(f"[digest] {len(events)} total events, downloading {len(top_events)} person snapshots ...")
+    snapshots = [fetch_snapshot(e["id"]) for e in top_events]
+    valid = sum(1 for s in snapshots if s)
+    print(f"[digest] Got {valid} snapshots")
 
-    if len(snapshots) >= 3:
-        image = make_ghost_composite(snapshots)
-        print("[digest] Ghost composite ready")
-    elif snapshots:
-        image = make_snapshot_grid(snapshots)
-        print("[digest] Snapshot grid ready (< 3 images, no ghost)")
+    # Need at least 2 snapshots (one background + one person to paste)
+    if valid >= 2:
+        image = make_twin_composite(top_events, snapshots)
+        print("[digest] Twin composite ready")
+    elif valid == 1:
+        image = make_snapshot_grid([s for s in snapshots if s])
+        print("[digest] Single snapshot (no composite possible)")
     else:
         image = None
         print("[digest] No snapshots available")

@@ -73,6 +73,59 @@ def _in_quiet_hours() -> bool:
         return h >= QUIET_START or h < QUIET_END
     return QUIET_START <= h < QUIET_END
 
+
+# ── Spatial awareness — proximity from bounding box ───────────────────────────
+# Frigate gives us a bounding box [x_min, y_min, x_max, y_max] normalized 0-1.
+# The taller the box is relative to the frame, the closer the object is.
+# These thresholds are tunable per environment (open yard vs tight driveway).
+#
+#   CLOSE   > 55% of frame height  →  "at the door / right in front of camera"
+#   MID     25–55%                 →  "in the yard / driveway"
+#   FAR     < 25%                  →  "at the edge of view / street"
+#
+PROXIMITY_CLOSE = float(os.getenv("PROXIMITY_CLOSE", "0.55"))
+PROXIMITY_MID   = float(os.getenv("PROXIMITY_MID",   "0.25"))
+
+
+def _proximity(box: list) -> str | None:
+    """
+    Return 'close', 'mid', or 'far' based on bounding box height fraction.
+    Returns None if box data is missing or malformed.
+    """
+    if not box or len(box) < 4:
+        return None
+    height_frac = box[3] - box[1]   # y_max - y_min
+    if height_frac <= 0:
+        return None
+    if height_frac >= PROXIMITY_CLOSE:
+        return "close"
+    if height_frac >= PROXIMITY_MID:
+        return "mid"
+    return "far"
+
+
+# Human-readable proximity phrases used in notification bodies
+_PROXIMITY_PHRASE = {
+    "close": "right at the camera",
+    "mid":   "mid-range",
+    "far":   "far edge of view",
+}
+
+# Proximity affects alert priority (close stranger → urgent → max)
+_PROXIMITY_PRIORITY_BUMP = {
+    "close": 1,   # bump priority up one level for close detections
+    "mid":   0,
+    "far":   0,
+}
+
+_PRIORITY_LEVELS = ["min", "low", "default", "high", "urgent"]
+
+
+def _bumped_priority(base: str, prox: str | None) -> str:
+    bump = _PROXIMITY_PRIORITY_BUMP.get(prox or "mid", 0)
+    idx  = _PRIORITY_LEVELS.index(base) if base in _PRIORITY_LEVELS else 2
+    return _PRIORITY_LEVELS[min(idx + bump, len(_PRIORITY_LEVELS) - 1)]
+
 # ── ntfy priority and tag mappings ────────────────────────────────────────────
 
 PRIORITY = {
@@ -145,11 +198,12 @@ def _send(
     kind: str,
     camera: str,
     event_id: str = "",
+    priority_override: str | None = None,
 ) -> None:
     """POST a notification to ntfy."""
     headers: dict[str, str] = {
         "Title":    title,
-        "Priority": PRIORITY.get(kind, "default"),
+        "Priority": priority_override or PRIORITY.get(kind, "default"),
         "Tags":     TAGS.get(kind, "bell"),
         "Click":    f"{FRIGATE_URL}/events?camera={camera}",
     }
@@ -185,6 +239,7 @@ def handle_frigate_event(payload: dict) -> None:
     score    = event.get("score") or event.get("top_score") or 0
     zones    = event.get("current_zones") or []
     event_id = event.get("id", "")
+    box      = event.get("box") or []
 
     # Persons are routed through Double-Take when face recognition is on
     if USE_FACE_RECOGNITION and label == "person":
@@ -217,17 +272,22 @@ def handle_frigate_event(payload: dict) -> None:
         if zones else ""
     )
 
+    # Spatial awareness — how close is the detected object?
+    prox      = _proximity(box)
+    prox_str  = f" — {_PROXIMITY_PHRASE[prox]}" if prox else ""
+    effective_priority = _bumped_priority(PRIORITY.get(label, "default"), prox)
+
     if label == "package":
         title = f"Package delivered — {camera_name}"
-        body  = f"Package spotted{zone_str}"
+        body  = f"Package spotted{zone_str}{prox_str}"
     elif label == "car":
         title = f"Vehicle at {camera_name}"
-        body  = f"Vehicle detected{zone_str} ({score:.0%} confidence)"
+        body  = f"Vehicle detected{zone_str}{prox_str} ({score:.0%})"
     else:
         title = f"{label_name} detected — {camera_name}"
-        body  = f"{label_name}{zone_str} ({score:.0%} confidence)"
+        body  = f"{label_name}{zone_str}{prox_str} ({score:.0%})"
 
-    _send(title, body, label, camera, event_id)
+    _send(title, body, label, camera, event_id, priority_override=effective_priority)
 
 
 # ── Double-Take face recognition event handler ────────────────────────────────
@@ -243,12 +303,17 @@ def handle_face_event(topic: str, payload: dict) -> None:
     confidence = payload.get("confidence", 0)
     event_id   = (payload.get("event") or {}).get("id", "")
     zones      = (payload.get("event") or {}).get("current_zones") or []
+    box        = (payload.get("event") or {}).get("box") or []
 
     camera_name = camera.replace("_", " ").title()
     zone_str    = (
         " in " + ", ".join(z.replace("_", " ").title() for z in zones)
         if zones else ""
     )
+
+    # Spatial awareness
+    prox     = _proximity(box)
+    prox_str = f" — {_PROXIMITY_PHRASE[prox]}" if prox else ""
 
     if confidence < MIN_FACE_SCORE:
         print(f"[skip] face/{camera}/{name}: {confidence:.0%} < {MIN_FACE_SCORE:.0%}")
@@ -275,7 +340,7 @@ def handle_face_event(topic: str, payload: dict) -> None:
 
         name_display = name.title()
         title = f"{name_display} is home — {camera_name}"
-        body  = f"{name_display} arrived{zone_str} ({confidence:.0%})"
+        body  = f"{name_display} arrived{zone_str}{prox_str} ({confidence:.0%})"
         print(f"[known] {title}")
         _send(title, body, "family", camera, event_id)
 
@@ -287,10 +352,13 @@ def handle_face_event(topic: str, payload: dict) -> None:
             return
         _mark_alerted(key)
 
+        # Stranger close to camera → bump to max urgency
+        effective_priority = _bumped_priority("urgent", prox)
+
         title = f"Stranger at {camera_name}"
-        body  = f"Unrecognized person detected{zone_str} — check camera"
-        print(f"[alert] {title}")
-        _send(title, body, "stranger", camera, event_id)
+        body  = f"Unrecognized person{zone_str}{prox_str} — check camera"
+        print(f"[alert] {title} ({prox or 'unknown distance'})")
+        _send(title, body, "stranger", camera, event_id, priority_override=effective_priority)
 
 
 # ── Audio event handler ───────────────────────────────────────────────────────
@@ -372,6 +440,7 @@ def main() -> None:
         print(f"[config] Quiet hours:          {QUIET_START:02d}:00–{QUIET_END:02d}:00 (urgent alerts still fire)")
     else:
         print("[config] Quiet hours:          disabled")
+    print(f"[config] Spatial awareness:    close>{PROXIMITY_CLOSE:.0%} mid>{PROXIMITY_MID:.0%} far=rest")
     print(f"[config] Cooldown:             {COOLDOWN}s")
     print(f"[config] ntfy endpoint:        {NTFY_URL}/{NTFY_TOPIC}")
     print("=" * 60)
