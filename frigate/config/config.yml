@@ -17,11 +17,11 @@
 # Frigate publishes detection events to MQTT. Useful for Home Assistant.
 # If you don't use MQTT/Home Assistant, set enabled: false.
 mqtt:
-  enabled: false
-  # host: 192.168.1.x   # IP of your MQTT broker (e.g. Home Assistant)
-  # port: 1883
-  # user: mqtt_user
-  # password: mqtt_pass
+  enabled: true
+  host: mosquitto    # Docker service name — matches docker-compose.yml
+  port: 1883
+  # If you also use a separate MQTT broker (e.g. Home Assistant), change
+  # the host above to its IP and remove the mosquitto service from docker-compose.
 
 
 # ── Detector ─────────────────────────────────────────────────────────────────

@@ -1,85 +1,118 @@
 version: "3.9"
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Frigate NVR — docker-compose.yml
+#  Frigate NVR stack
+#
+#  Services:
+#    frigate    — NVR + AI object detection
+#    mosquitto  — MQTT broker (Frigate publishes events here)
+#    notifier   — reads MQTT events, sends push notifications via ntfy
 #
 #  Prerequisites:
-#    - Docker + Docker Compose installed on your Linux/Mac/Windows machine
-#    - Wyze cameras with RTSP enabled (Wyze app → Camera → Settings →
-#      Advanced Settings → RTSP → Enable)
+#    - Docker + Docker Compose on your machine
+#    - Wyze RTSP enabled (Wyze app → Camera → Settings → Advanced → RTSP)
 #
-#  Run from this directory:
-#    docker compose up -d
-#
-#  Web UI opens at:  http://localhost:5000
-#  (or http://your-server-ip:5000 from another device on the network)
+#  Quick start:
+#    1. Edit the environment variables below (camera IPs, ntfy topic)
+#    2. docker compose up -d
+#    3. Open http://localhost:5000 for the Frigate web UI
 #
 #  Logs:
 #    docker compose logs -f frigate
-#
-#  Stop:
-#    docker compose down
+#    docker compose logs -f notifier
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
+
+  # ── Frigate NVR ─────────────────────────────────────────────────────────────
   frigate:
     image: ghcr.io/blakeblackshear/frigate:stable
     container_name: frigate
     restart: unless-stopped
-
-    # Frigate needs elevated access for hardware video decoding.
-    # If you don't have a Coral TPU or GPU, you can change this to
-    # privileged: false and remove the devices section below.
-    privileged: true
-
-    # Shared memory for frame buffers.
-    # Increase to 512mb if you have 4+ cameras.
-    shm_size: "256mb"
+    privileged: true       # needed for hardware decoder access
+    shm_size: "256mb"      # frame buffer RAM — raise to 512mb for 4+ cameras
+    depends_on:
+      - mosquitto
 
     devices:
-      # ── Uncomment what applies to you ───────────────────────────────────
-
-      # Google Coral USB accelerator (huge AI speed improvement, ~$60 on Amazon)
+      # ── Uncomment what you have ───────────────────────────────────────────
+      # Google Coral USB (~$60, makes AI ~10x faster — highly recommended)
       # - /dev/bus/usb:/dev/bus/usb
 
-      # Intel GPU / QuickSync (if your CPU has integrated graphics)
+      # Intel integrated GPU (QuickSync hardware decode)
       # - /dev/dri/renderD128:/dev/dri/renderD128
 
-      # NVIDIA GPU — also add "runtime: nvidia" below and the CUDA image tag
-      # (see https://docs.frigate.video/configuration/hardware_acceleration)
-
     volumes:
-      # Sync container clock with host
       - /etc/localtime:/etc/localtime:ro
-
-      # Frigate config file — edit config/config.yml in this directory
       - ./config:/config
-
-      # Where recordings and snapshots are saved.
-      # Change the left side to a path with plenty of disk space.
-      # Example: - /mnt/nas/frigate:/media/frigate
-      - ./storage:/media/frigate
-
-      # Temp cache for HLS segments (1 GB, RAM-backed for speed)
+      - ./storage:/media/frigate       # ⚠️ change left side to a large disk path
       - type: tmpfs
         target: /tmp/cache
         tmpfs:
-          size: 1000000000
+          size: 1000000000             # 1 GB HLS cache
 
     ports:
       - "5000:5000"        # Web UI
-      - "8554:8554"        # go2rtc RTSP re-stream (for viewing in VLC etc.)
-      - "8555:8555/tcp"    # go2rtc WebRTC TCP
-      - "8555:8555/udp"    # go2rtc WebRTC UDP
+      - "8554:8554"        # RTSP re-stream (VLC, other apps)
+      - "8555:8555/tcp"    # WebRTC TCP
+      - "8555:8555/udp"    # WebRTC UDP
 
-    # Optional: expose these environment variables in config.yml as
-    # {FRIGATE_RTSP_USER} and {FRIGATE_RTSP_PASSWORD} so you don't
-    # hard-code credentials in config.
     environment:
-      FRIGATE_RTSP_USER: "wyze"          # your Wyze RTSP username
-      FRIGATE_RTSP_PASSWORD: "changeme"  # your Wyze RTSP password
+      # ⚠️  Set these to your Wyze RTSP credentials
+      FRIGATE_RTSP_USER:     "wyze"
+      FRIGATE_RTSP_PASSWORD: "changeme"
 
-    # Uncomment if you have an NVIDIA GPU:
+    # Uncomment for NVIDIA GPU:
     # runtime: nvidia
-    # environment:
-    #   - NVIDIA_VISIBLE_DEVICES=all
+
+  # ── Mosquitto MQTT broker ────────────────────────────────────────────────────
+  # Frigate publishes detection events to MQTT. The notifier reads from here.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  # ── Push notification bridge ─────────────────────────────────────────────────
+  # Listens to Frigate MQTT events and sends push notifications via ntfy.
+  notifier:
+    build: ./notifier
+    container_name: frigate-notifier
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - frigate
+
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+
+      # ── ntfy settings ──────────────────────────────────────────────────────
+      # 1. Install the ntfy app on your phone (iOS or Android — it's free)
+      # 2. Pick a unique topic name — anyone who knows it can subscribe, so
+      #    make it hard to guess (treat it like a password)
+      # 3. Open the ntfy app → + → enter your topic name → Subscribe
+      NTFY_URL:   "https://ntfy.sh"      # or your self-hosted ntfy address
+      NTFY_TOPIC: "change-this-to-something-unique-abc123"  # ⚠️ change this!
+
+      # Frigate's base URL — used to build links in notifications
+      FRIGATE_URL: "http://frigate:5000"
+
+      # ── What triggers an alert ─────────────────────────────────────────────
+      # Comma-separated list of objects that will send a notification.
+      # Remove "cat" and "dog" if you have pets and don't want alerts for them.
+      ALERT_OBJECTS: "person,car"
+
+      # Minimum AI confidence to alert (0.0–1.0). 0.75 = 75% sure.
+      # Raise this if you're getting false positives.
+      MIN_SCORE: "0.75"
+
+      # Only alert when the object is inside a defined zone.
+      # "true" = ignore objects wandering on the street outside your zones.
+      # "false" = alert anywhere in the frame.
+      REQUIRE_ZONE: "true"
+
+      # Seconds before the same camera+object can alert again.
+      # Prevents a person standing at your door from sending 50 notifications.
+      ALERT_COOLDOWN: "120"
