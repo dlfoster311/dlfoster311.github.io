@@ -1,0 +1,85 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Frigate NVR — docker-compose.yml
+#
+#  Prerequisites:
+#    - Docker + Docker Compose installed on your Linux/Mac/Windows machine
+#    - Wyze cameras with RTSP enabled (Wyze app → Camera → Settings →
+#      Advanced Settings → RTSP → Enable)
+#
+#  Run from this directory:
+#    docker compose up -d
+#
+#  Web UI opens at:  http://localhost:5000
+#  (or http://your-server-ip:5000 from another device on the network)
+#
+#  Logs:
+#    docker compose logs -f frigate
+#
+#  Stop:
+#    docker compose down
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: frigate
+    restart: unless-stopped
+
+    # Frigate needs elevated access for hardware video decoding.
+    # If you don't have a Coral TPU or GPU, you can change this to
+    # privileged: false and remove the devices section below.
+    privileged: true
+
+    # Shared memory for frame buffers.
+    # Increase to 512mb if you have 4+ cameras.
+    shm_size: "256mb"
+
+    devices:
+      # ── Uncomment what applies to you ───────────────────────────────────
+
+      # Google Coral USB accelerator (huge AI speed improvement, ~$60 on Amazon)
+      # - /dev/bus/usb:/dev/bus/usb
+
+      # Intel GPU / QuickSync (if your CPU has integrated graphics)
+      # - /dev/dri/renderD128:/dev/dri/renderD128
+
+      # NVIDIA GPU — also add "runtime: nvidia" below and the CUDA image tag
+      # (see https://docs.frigate.video/configuration/hardware_acceleration)
+
+    volumes:
+      # Sync container clock with host
+      - /etc/localtime:/etc/localtime:ro
+
+      # Frigate config file — edit config/config.yml in this directory
+      - ./config:/config
+
+      # Where recordings and snapshots are saved.
+      # Change the left side to a path with plenty of disk space.
+      # Example: - /mnt/nas/frigate:/media/frigate
+      - ./storage:/media/frigate
+
+      # Temp cache for HLS segments (1 GB, RAM-backed for speed)
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000
+
+    ports:
+      - "5000:5000"        # Web UI
+      - "8554:8554"        # go2rtc RTSP re-stream (for viewing in VLC etc.)
+      - "8555:8555/tcp"    # go2rtc WebRTC TCP
+      - "8555:8555/udp"    # go2rtc WebRTC UDP
+
+    # Optional: expose these environment variables in config.yml as
+    # {FRIGATE_RTSP_USER} and {FRIGATE_RTSP_PASSWORD} so you don't
+    # hard-code credentials in config.
+    environment:
+      FRIGATE_RTSP_USER: "wyze"          # your Wyze RTSP username
+      FRIGATE_RTSP_PASSWORD: "changeme"  # your Wyze RTSP password
+
+    # Uncomment if you have an NVIDIA GPU:
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
