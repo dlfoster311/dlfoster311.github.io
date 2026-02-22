@@ -184,6 +184,39 @@ services:
       PLATE_COOLDOWN: "3600"          # 1 hour before re-alerting same plate
       LPR_REGION: "${LPR_REGION:-}"   # optional region hint, e.g. us-ca, ca-on
 
+  # ── Wildlife species identification ──────────────────────────────────────────
+  # Identifies the exact species of birds and animals detected by Frigate.
+  # Uses iNaturalist's free computer vision API (covers birds, mammals,
+  # reptiles, insects — anything with a photo).
+  #
+  # Setup:
+  #   1. Create a free account at https://www.inaturalist.org
+  #   2. Get your token at https://www.inaturalist.org/users/api_token
+  #   3. Add INAT_TOKEN=... to .env
+  #   4. Optional: INAT_LAT / INAT_LNG for your location (improves accuracy)
+  species:
+    build: ./species
+    container_name: frigate-species
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - ntfy
+      - frigate
+    volumes:
+      - species-data:/data       # persists sightings.log between restarts
+    environment:
+      INAT_TOKEN:  "${INAT_TOKEN:-}"
+      INAT_LAT:    "${INAT_LAT:-}"
+      INAT_LNG:    "${INAT_LNG:-}"
+      MQTT_HOST:   mosquitto
+      MQTT_PORT:   "1883"
+      NTFY_URL:    "http://ntfy:80"
+      NTFY_TOPIC:  "${NTFY_TOPIC:-frigate-alerts}"
+      FRIGATE_URL: "${FRIGATE_URL:-http://frigate:5000}"
+      SPECIES_OBJECTS:   "bird,cat,dog,deer,bear,raccoon,fox,squirrel"
+      MIN_SPECIES_SCORE: "0.70"
+      SPECIES_COOLDOWN:  "1800"   # 30 min — won't re-alert same species
+
   # ── Scrypted — Apple HomeKit + Google Home ────────────────────────────────────
   # Setup at https://localhost:10443 → install Frigate NVR + HomeKit plugins
   scrypted:
@@ -196,3 +229,4 @@ services:
 
 volumes:
   lpr-data:
+  species-data:
