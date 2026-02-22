@@ -1,26 +1,35 @@
 version: "3.9"
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Frigate NVR stack
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Frigate NVR — full feature stack
 #
-#  Services:
-#    frigate    — NVR + AI object detection
-#    mosquitto  — MQTT broker (Frigate publishes events here)
-#    notifier   — reads MQTT events, sends push notifications via ntfy
+#  Services
+#  ────────
+#  frigate       NVR + AI object detection (person, car, package, etc.)
+#  mosquitto     MQTT broker — Frigate publishes all events here
+#  deepstack     AI engine for face recognition
+#  double-take   Face recognition orchestrator + training UI
+#  ntfy          Self-hosted push notification server (iOS + Android)
+#  notifier      Bridges Frigate/Double-Take MQTT → ntfy push alerts
+#  scrypted      Apple HomeKit + Google Home camera bridge
 #
-#  Prerequisites:
-#    - Docker + Docker Compose on your machine
-#    - Wyze RTSP enabled (Wyze app → Camera → Settings → Advanced → RTSP)
+#  Quick start
+#  ───────────
+#  1. Edit every line marked ⚠️ below
+#  2. docker compose up -d
+#  3. Frigate:      http://localhost:5000
+#     Double-Take:  http://localhost:3000   ← train faces here
+#     ntfy:         http://localhost:8080   ← subscribe in ntfy app
+#     Scrypted:     https://localhost:10443 ← connect HomeKit here
 #
-#  Quick start:
-#    1. Edit the environment variables below (camera IPs, ntfy topic)
-#    2. docker compose up -d
-#    3. Open http://localhost:5000 for the Frigate web UI
+#  Secure remote access (so you can view cameras from anywhere on your phone)
+#  ─────────────────────────────────────────────────────────────────────────
+#  Run ./tailscale-setup.sh on this machine once.
+#  Install the Tailscale app on your iPhone/Android.
+#  Sign in with the same account → your phone is now on a private VPN
+#  with this server. Access all services above via the Tailscale IP.
 #
-#  Logs:
-#    docker compose logs -f frigate
-#    docker compose logs -f notifier
-# ─────────────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
 
 services:
 
@@ -29,13 +38,13 @@ services:
     image: ghcr.io/blakeblackshear/frigate:stable
     container_name: frigate
     restart: unless-stopped
-    privileged: true       # needed for hardware decoder access
-    shm_size: "256mb"      # frame buffer RAM — raise to 512mb for 4+ cameras
+    privileged: true
+    shm_size: "256mb"        # raise to 512mb for 4+ cameras
     depends_on:
       - mosquitto
 
     devices:
-      # ── Uncomment what you have ───────────────────────────────────────────
+      # ── Uncomment what you have ─────────────────────────────────────────────
       # Google Coral USB (~$60, makes AI ~10x faster — highly recommended)
       # - /dev/bus/usb:/dev/bus/usb
 
@@ -45,28 +54,23 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
-      - ./storage:/media/frigate       # ⚠️ change left side to a large disk path
+      - ./storage:/media/frigate          # ⚠️ change left side to a large disk
       - type: tmpfs
         target: /tmp/cache
         tmpfs:
-          size: 1000000000             # 1 GB HLS cache
+          size: 1000000000
 
     ports:
-      - "5000:5000"        # Web UI
-      - "8554:8554"        # RTSP re-stream (VLC, other apps)
+      - "5000:5000"        # Web UI (accessible on LAN + via Tailscale)
+      - "8554:8554"        # RTSP re-stream
       - "8555:8555/tcp"    # WebRTC TCP
       - "8555:8555/udp"    # WebRTC UDP
 
     environment:
-      # ⚠️  Set these to your Wyze RTSP credentials
-      FRIGATE_RTSP_USER:     "wyze"
-      FRIGATE_RTSP_PASSWORD: "changeme"
-
-    # Uncomment for NVIDIA GPU:
-    # runtime: nvidia
+      FRIGATE_RTSP_USER:     "wyze"       # ⚠️ your Wyze RTSP username
+      FRIGATE_RTSP_PASSWORD: "changeme"   # ⚠️ your Wyze RTSP password
 
   # ── Mosquitto MQTT broker ────────────────────────────────────────────────────
-  # Frigate publishes detection events to MQTT. The notifier reads from here.
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
@@ -74,45 +78,138 @@ services:
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
 
+  # ── DeepStack — AI engine for face recognition ───────────────────────────────
+  # Processes face images and determines if they match known people.
+  # Training happens in the Double-Take UI (no ML expertise needed).
+  deepstack:
+    image: deepquestai/deepstack:latest
+    container_name: deepstack
+    restart: unless-stopped
+    volumes:
+      - ./deepstack:/datastore            # stores trained face data
+    environment:
+      VISION-FACE: "True"                 # enable face recognition module
+
+  # ── Double-Take — face recognition orchestrator ───────────────────────────────
+  # Watches Frigate for person events, sends snapshots to DeepStack,
+  # publishes results back to MQTT with the recognized person's name.
+  #
+  # Setup (one-time):
+  #   1. Open http://localhost:3000
+  #   2. Go to Settings → enter your MQTT and Frigate URLs (already configured
+  #      below in config.yml — you just need to confirm they're correct)
+  #   3. Go to Train → upload 5-10 clear face photos for each person
+  #      (different angles, lighting conditions, with/without glasses)
+  #   4. Add names to KNOWN_PEOPLE in the notifier section below
+  double-take:
+    image: jakowenko/double-take:latest
+    container_name: double-take
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - deepstack
+      - frigate
+    volumes:
+      - ./double-take:/double-take/.storage
+    ports:
+      - "3000:3000"                       # Training UI
+
+  # ── ntfy — self-hosted push notification server ───────────────────────────────
+  # Runs on your machine — snapshots will actually embed in notifications
+  # since ntfy can reach Frigate directly on the Docker network.
+  #
+  # Setup:
+  #   1. Install the ntfy app (iOS App Store or Google Play — free)
+  #   2. In the app: Settings → Default server → http://YOUR_TAILSCALE_IP:8080
+  #   3. Subscribe to the topic name you set in NTFY_TOPIC below
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    restart: unless-stopped
+    command: serve
+    volumes:
+      - ./ntfy/cache:/var/cache/ntfy
+    ports:
+      - "8080:80"                         # ntfy server (accessible via Tailscale)
+    environment:
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_ATTACHMENT_CACHE_DIR: /var/cache/ntfy/attachments
+      # Tells ntfy where it's accessible from — use your Tailscale IP here
+      # so notification attachments (snapshots) resolve correctly on your phone.
+      # Find your Tailscale IP with: tailscale ip -4
+      NTFY_BASE_URL: "http://YOUR_TAILSCALE_IP:8080"   # ⚠️ set after running tailscale-setup.sh
+
   # ── Push notification bridge ─────────────────────────────────────────────────
-  # Listens to Frigate MQTT events and sends push notifications via ntfy.
+  # Reads Frigate and Double-Take MQTT events → sends ntfy push notifications.
+  # Face recognized = you or wife → silent "arrived home" or no alert.
+  # Face unknown = urgent "Stranger at front door" alert.
   notifier:
     build: ./notifier
     container_name: frigate-notifier
     restart: unless-stopped
     depends_on:
       - mosquitto
-      - frigate
+      - ntfy
 
     environment:
       MQTT_HOST: mosquitto
       MQTT_PORT: "1883"
 
-      # ── ntfy settings ──────────────────────────────────────────────────────
-      # 1. Install the ntfy app on your phone (iOS or Android — it's free)
-      # 2. Pick a unique topic name — anyone who knows it can subscribe, so
-      #    make it hard to guess (treat it like a password)
-      # 3. Open the ntfy app → + → enter your topic name → Subscribe
-      NTFY_URL:   "https://ntfy.sh"      # or your self-hosted ntfy address
-      NTFY_TOPIC: "change-this-to-something-unique-abc123"  # ⚠️ change this!
+      # ntfy — points to the self-hosted container on the Docker network
+      NTFY_URL:   "http://ntfy:80"
+      NTFY_TOPIC: "change-this-to-something-unique-abc123"   # ⚠️ pick something hard to guess
 
-      # Frigate's base URL — used to build links in notifications
+      # Frigate's URL — used to build snapshot links in notifications
+      # After setting up Tailscale, change this to http://YOUR_TAILSCALE_IP:5000
+      # so snapshot links in notifications open from anywhere on your phone.
       FRIGATE_URL: "http://frigate:5000"
 
-      # ── What triggers an alert ─────────────────────────────────────────────
-      # Comma-separated list of objects that will send a notification.
-      # Remove "cat" and "dog" if you have pets and don't want alerts for them.
-      ALERT_OBJECTS: "person,car"
+      # ── Non-person object alerts ────────────────────────────────────────────
+      # "person" is handled by Double-Take (face recognition) below.
+      # Add objects here for Frigate-level alerts.
+      ALERT_OBJECTS: "car,package"
 
-      # Minimum AI confidence to alert (0.0–1.0). 0.75 = 75% sure.
-      # Raise this if you're getting false positives.
-      MIN_SCORE: "0.75"
+      MIN_SCORE: "0.75"       # min AI confidence for object alerts (0.0–1.0)
+      REQUIRE_ZONE: "true"    # only alert if object is in a defined zone
+      ALERT_COOLDOWN: "120"   # seconds before same camera+object can re-alert
 
-      # Only alert when the object is inside a defined zone.
-      # "true" = ignore objects wandering on the street outside your zones.
-      # "false" = alert anywhere in the frame.
-      REQUIRE_ZONE: "true"
+      # ── Face recognition alerts ──────────────────────────────────────────────
+      # Requires Double-Take to be set up and trained first.
+      USE_FACE_RECOGNITION: "true"
+      MIN_FACE_SCORE: "0.80"  # min face recognition confidence (0.0–1.0)
 
-      # Seconds before the same camera+object can alert again.
-      # Prevents a person standing at your door from sending 50 notifications.
-      ALERT_COOLDOWN: "120"
+      # ⚠️ Fill in names after training Double-Take.
+      # These people will get a low-priority "arrived home" notification
+      # instead of an urgent stranger alert. Use lowercase, comma-separated.
+      # Example: "david,sarah"
+      KNOWN_PEOPLE: ""
+
+      # Set to "false" to disable "arrived home" notifications for family.
+      # Unknown strangers will always alert regardless of this setting.
+      FAMILY_ARRIVAL_ALERTS: "true"
+
+  # ── Scrypted — Apple HomeKit + Google Home camera bridge ─────────────────────
+  # Exposes your Frigate cameras natively in:
+  #   - Apple Home app (live view, notifications, Siri, Apple Watch)
+  #   - Google Home
+  #
+  # Setup (one-time):
+  #   1. Open https://localhost:10443 (accept the self-signed cert warning)
+  #   2. Create an account
+  #   3. Plugins → search "Frigate NVR" → Install
+  #   4. Configure Frigate NVR plugin: URL = http://HOST_LAN_IP:5000
+  #   5. Plugins → search "HomeKit" → Install
+  #   6. Follow the QR code to add cameras in the Apple Home app
+  #
+  # Note: network_mode: host is required for HomeKit's Bonjour/mDNS discovery.
+  # This means Scrypted connects to Frigate via your host's LAN IP (not the
+  # Docker service name). Find your host IP with: hostname -I | awk '{print $1}'
+  scrypted:
+    image: ghcr.io/koush/scrypted:latest
+    container_name: scrypted
+    restart: unless-stopped
+    network_mode: host                    # required for HomeKit mDNS discovery
+    volumes:
+      - ./scrypted:/server/volume
+    # Scrypted web UI: https://localhost:10443
+    # (or https://YOUR_TAILSCALE_IP:10443 from your phone)
