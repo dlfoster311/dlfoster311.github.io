@@ -164,6 +164,32 @@ cameras_default: &camera_defaults
         default: 30      # keep event clips for 30 days
         mode: active_objects  # only keep clips where an object was actually tracked
 
+  # ── Audio detection ───────────────────────────────────────────────────────
+  # Frigate listens to the camera's microphone and alerts on specific sounds.
+  # The audio events flow through the notifier → ntfy just like motion events.
+  #
+  # Supported events (built-in Frigate audio model):
+  #   bark               — dog barking
+  #   fire_alarm         — smoke/CO detector going off
+  #   glass_breaking     — window or glass breaking
+  #   motorcycle         — motorcycle / loud engine
+  #   screaming          — human screaming
+  #   smoke_detector_alarm — smoke/CO alarm (same model as fire_alarm, higher confidence)
+  #   speech             — human speech (use cautiously — chatty cameras)
+  #
+  # Note: Gunshot detection is not in Frigate's default model. If you need it,
+  # a custom audio model can be loaded, but it's an advanced configuration.
+  audio:
+    enabled: true
+    listen:
+      - bark
+      - fire_alarm
+      - glass_breaking
+      - screaming
+      - smoke_detector_alarm
+    # min_volume: 500   # ignore audio below this volume level (0-32767)
+                        # raise if you get false positives from AC/wind noise
+
   # ── Notifications via ntfy (optional, free, self-hosted or cloud) ─────────
   # Install the ntfy app on your phone, then uncomment and fill this in.
   # No account needed — just pick a unique topic name.

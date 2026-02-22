@@ -3,6 +3,7 @@ Frigate + Double-Take → ntfy push notification bridge.
 
 Event routing:
   frigate/events            → non-person objects (car, package, cat, etc.)
+  frigate/+/audio/+         → audio detection (glass breaking, alarms, screaming, etc.)
   double-take/cameras/#     → face-identified person events
                                - known family member → low-priority "arrived home"
                                - unrecognized face   → urgent "Stranger" alert
@@ -52,25 +53,52 @@ FAMILY_ARRIVAL_ALERTS = os.getenv("FAMILY_ARRIVAL_ALERTS", "true").lower() == "t
 # ── ntfy priority and tag mappings ────────────────────────────────────────────
 
 PRIORITY = {
-    "stranger": "urgent",
-    "person":   "high",
-    "package":  "high",
-    "car":      "default",
-    "family":   "low",
-    "dog":      "low",
-    "cat":      "low",
-    "bird":     "min",
+    "stranger":            "urgent",
+    "person":              "high",
+    "package":             "high",
+    "car":                 "default",
+    "family":              "low",
+    "dog":                 "low",
+    "cat":                 "low",
+    "bird":                "min",
+    # Audio events
+    "glass_breaking":      "urgent",
+    "screaming":           "urgent",
+    "fire_alarm":          "urgent",
+    "smoke_detector_alarm": "urgent",
+    "bark":                "default",
+    "speech":              "low",
+    "motorcycle":          "low",
 }
 
 TAGS = {
-    "stranger": "warning,bust_in_silhouette",
-    "person":   "bust_in_silhouette,rotating_light",
-    "package":  "package",
-    "car":      "car",
-    "family":   "house",
-    "dog":      "dog",
-    "cat":      "cat",
-    "bird":     "bird",
+    "stranger":            "warning,bust_in_silhouette",
+    "person":              "bust_in_silhouette,rotating_light",
+    "package":             "package",
+    "car":                 "car",
+    "family":              "house",
+    "dog":                 "dog",
+    "cat":                 "cat",
+    "bird":                "bird",
+    # Audio events
+    "glass_breaking":      "rotating_light,glass",
+    "screaming":           "rotating_light,sos",
+    "fire_alarm":          "fire,rotating_light",
+    "smoke_detector_alarm": "fire,rotating_light",
+    "bark":                "dog",
+    "speech":              "speech_balloon",
+    "motorcycle":          "oncoming_automobile",
+}
+
+# Human-readable alert titles and body text for each audio event
+_AUDIO_ALERTS: dict[str, tuple[str, str]] = {
+    "glass_breaking":      ("Glass breaking — {camera}", "Sound of breaking glass detected"),
+    "screaming":           ("Screaming detected — {camera}", "Human screaming detected — check camera"),
+    "fire_alarm":          ("Fire alarm — {camera}", "Fire or smoke alarm sound detected"),
+    "smoke_detector_alarm": ("Smoke alarm — {camera}", "Smoke or CO detector going off"),
+    "bark":                ("Dog barking — {camera}", "Barking detected"),
+    "speech":              ("Speech — {camera}", "Human speech detected"),
+    "motorcycle":          ("Loud engine — {camera}", "Motorcycle or loud engine detected"),
 }
 
 # ── Cooldown tracking ─────────────────────────────────────────────────────────
@@ -236,6 +264,36 @@ def handle_face_event(topic: str, payload: dict) -> None:
         _send(title, body, "stranger", camera, event_id)
 
 
+# ── Audio event handler ───────────────────────────────────────────────────────
+
+def handle_audio_event(topic: str, payload: dict) -> None:
+    # Topic: frigate/{camera}/audio/{event_type}
+    parts = topic.split("/")
+    if len(parts) < 4:
+        return
+
+    camera     = parts[1]
+    event_type = parts[3]
+
+    if event_type not in _AUDIO_ALERTS:
+        print(f"[skip] audio/{camera}/{event_type}: not in alert list")
+        return
+
+    key = f"{camera}:audio:{event_type}"
+    if _in_cooldown(key):
+        print(f"[skip] audio/{camera}/{event_type}: cooldown")
+        return
+    _mark_alerted(key)
+
+    camera_name = camera.replace("_", " ").title()
+    title_tpl, body = _AUDIO_ALERTS[event_type]
+    title = title_tpl.format(camera=camera_name)
+
+    print(f"[audio] {title}")
+    # Audio events don't have a snapshot, but we link to the camera's event page
+    _send(title, body, event_type, camera, event_id="")
+
+
 # ── MQTT ──────────────────────────────────────────────────────────────────────
 
 def on_connect(client: mqtt.Client, userdata, flags, rc: int) -> None:
@@ -244,8 +302,9 @@ def on_connect(client: mqtt.Client, userdata, flags, rc: int) -> None:
         return
 
     client.subscribe("frigate/events")
+    client.subscribe("frigate/+/audio/+")
     print(f"[mqtt] Connected to {MQTT_HOST}:{MQTT_PORT}")
-    print("[mqtt] Subscribed to: frigate/events")
+    print("[mqtt] Subscribed to: frigate/events, frigate/+/audio/+")
 
     if USE_FACE_RECOGNITION:
         client.subscribe("double-take/cameras/#")
@@ -261,6 +320,8 @@ def on_message(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
     topic = msg.topic
     if topic == "frigate/events":
         handle_frigate_event(payload)
+    elif "/audio/" in topic:
+        handle_audio_event(topic, payload)
     elif topic.startswith("double-take/cameras/"):
         handle_face_event(topic, payload)
 
@@ -277,6 +338,7 @@ def main() -> None:
     print("[config] Object alerts:       ", sorted(ALERT_OBJECTS))
     print(f"[config] Min object score:     {MIN_SCORE:.0%}")
     print(f"[config] Require zone:         {REQUIRE_ZONE}")
+    print("[config] Audio alerts:        ", sorted(_AUDIO_ALERTS.keys()))
     print(f"[config] Cooldown:             {COOLDOWN}s")
     print(f"[config] ntfy endpoint:        {NTFY_URL}/{NTFY_TOPIC}")
     print("=" * 60)
