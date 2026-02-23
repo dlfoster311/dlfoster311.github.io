@@ -2,6 +2,19 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  Frigate NVR — one-time setup wizard
 #
+#  ┌─ Windows users ──────────────────────────────────────────────────────────┐
+#  │  "bash is not recognized" means you need a bash shell. Two options:      │
+#  │                                                                           │
+#  │  Option A — Git Bash (quickest if you have Git installed)                │
+#  │    Open the Start menu → search "Git Bash" → open it                    │
+#  │    cd into this folder, then:  bash setup.sh                             │
+#  │                                                                           │
+#  │  Option B — WSL (recommended, needed for Docker on Windows anyway)       │
+#  │    In an admin PowerShell:  wsl --install                                │
+#  │    Restart, then open "Ubuntu" from the Start menu                       │
+#  │    cd into this folder, then:  bash setup.sh                             │
+#  └──────────────────────────────────────────────────────────────────────────┘
+#
 #  Run from the frigate/ directory:
 #    bash setup.sh
 #
