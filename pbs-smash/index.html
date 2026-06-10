@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PBS SMASH! - PBS Kids Fighting Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- TITLE SCREEN -->
+    <div id="titleScreen" class="screen">
+        <div class="title-logo">
+            <h1>PBS <span class="smash-text">SMASH!</span></h1>
+            <p class="subtitle">A Very Educational Brawl</p>
+        </div>
+        <div class="menu-buttons">
+            <button class="menu-btn" onclick="setMode(true)">1 PLAYER</button>
+            <button class="menu-btn" onclick="setMode(false)">2 PLAYERS</button>
+            <button class="menu-btn small" onclick="showScreen('howToPlay')">HOW TO PLAY</button>
+        </div>
+        <p class="footer-text">All fighters are 100% legally distinct original characters.<br>Any resemblance to beloved public-television icons is purely educational.</p>
+    </div>
+
+    <!-- HOW TO PLAY -->
+    <div id="howToPlay" class="screen hidden">
+        <h2>HOW TO PLAY</h2>
+        <div class="controls-grid">
+            <div class="control-column">
+                <h3>Player 1</h3>
+                <p><kbd>A</kbd> / <kbd>D</kbd> — Move</p>
+                <p><kbd>W</kbd> — Jump (double jump!)</p>
+                <p><kbd>F</kbd> — Attack</p>
+                <p><kbd>G</kbd> — Special</p>
+            </div>
+            <div class="control-column">
+                <h3>Player 2</h3>
+                <p><kbd>←</kbd> / <kbd>→</kbd> — Move</p>
+                <p><kbd>↑</kbd> — Jump (double jump!)</p>
+                <p><kbd>K</kbd> — Attack</p>
+                <p><kbd>L</kbd> — Special</p>
+            </div>
+        </div>
+        <p class="tip">Higher damage % = launched farther! Knock your opponent off the stage to take a stock. Last fighter standing wins!</p>
+        <button class="menu-btn" onclick="showScreen('titleScreen')">BACK</button>
+    </div>
+
+    <!-- CHARACTER SELECT -->
+    <div id="characterSelect" class="screen hidden">
+        <h2>CHOOSE YOUR FIGHTER</h2>
+        <div class="select-container">
+            <div class="player-select" id="p1Select">
+                <h3>Player 1</h3>
+                <div class="char-preview" id="p1Preview"></div>
+                <div class="char-name" id="p1Name">???</div>
+            </div>
+            <div class="character-grid" id="charGrid"></div>
+            <div class="player-select" id="p2Select">
+                <h3 id="p2Heading">Player 2</h3>
+                <div class="char-preview" id="p2Preview"></div>
+                <div class="char-name" id="p2Name">???</div>
+            </div>
+        </div>
+        <div class="stage-select">
+            <h3>STAGE</h3>
+            <div class="stage-options" id="stageOptions"></div>
+        </div>
+        <button class="menu-btn" id="fightBtn" onclick="startFight()" disabled>FIGHT!</button>
+        <button class="menu-btn small" onclick="showScreen('titleScreen')">BACK</button>
+    </div>
+
+    <!-- GAME -->
+    <div id="gameScreen" class="screen hidden">
+        <div class="hud">
+            <div class="hud-player" id="hudP1">
+                <div class="hud-name" id="hudP1Name"></div>
+                <div class="hud-damage" id="hudP1Damage">0%</div>
+                <div class="hud-stocks" id="hudP1Stocks"></div>
+            </div>
+            <div class="hud-center">
+                <div class="hud-timer" id="hudTimer">99</div>
+            </div>
+            <div class="hud-player" id="hudP2">
+                <div class="hud-name" id="hudP2Name"></div>
+                <div class="hud-damage" id="hudP2Damage">0%</div>
+                <div class="hud-stocks" id="hudP2Stocks"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div id="resultsScreen" class="screen hidden">
+        <h2 id="winnerText">GAME!</h2>
+        <div class="winner-display" id="winnerDisplay"></div>
+        <div class="result-buttons">
+            <button class="menu-btn" onclick="startFight()">REMATCH</button>
+            <button class="menu-btn" onclick="showScreen('characterSelect')">CHARACTER SELECT</button>
+            <button class="menu-btn small" onclick="showScreen('titleScreen')">MAIN MENU</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

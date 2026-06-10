@@ -1,0 +1,491 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700;900&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #1a0a2e;
+    overflow: hidden;
+    font-family: 'Nunito', sans-serif;
+    color: white;
+    width: 100vw;
+    height: 100vh;
+}
+
+#gameCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+.screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: opacity 0.3s;
+}
+
+.screen.hidden {
+    display: none;
+}
+
+/* Game screen must not block the canvas */
+#gameScreen {
+    pointer-events: none;
+}
+
+/* TITLE SCREEN */
+.title-logo h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 6rem;
+    text-align: center;
+    color: #4fc3f7;
+    text-shadow:
+        4px 4px 0 #1565c0,
+        -2px -2px 0 #1565c0,
+        2px -2px 0 #1565c0,
+        -2px 2px 0 #1565c0,
+        0 6px 20px rgba(0,0,0,0.5);
+    letter-spacing: 4px;
+    animation: titleBounce 2s ease-in-out infinite;
+}
+
+.smash-text {
+    color: #ff6f00;
+    font-size: 7rem;
+    text-shadow:
+        4px 4px 0 #bf360c,
+        -2px -2px 0 #bf360c,
+        2px -2px 0 #bf360c,
+        -2px 2px 0 #bf360c,
+        0 0 40px rgba(255,111,0,0.6);
+}
+
+@keyframes titleBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.subtitle {
+    font-size: 1.4rem;
+    color: #b39ddb;
+    text-align: center;
+    margin-top: 8px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+}
+
+.menu-buttons {
+    margin-top: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.menu-btn {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.5rem;
+    padding: 14px 60px;
+    border: none;
+    border-radius: 50px;
+    background: linear-gradient(135deg, #ff6f00, #ff8f00);
+    color: white;
+    cursor: pointer;
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+    box-shadow: 0 6px 0 #e65100, 0 8px 20px rgba(0,0,0,0.4);
+    transition: all 0.1s;
+    letter-spacing: 2px;
+}
+
+.menu-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 0 #e65100, 0 10px 24px rgba(0,0,0,0.4);
+}
+
+.menu-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #e65100, 0 4px 10px rgba(0,0,0,0.4);
+}
+
+.menu-btn:disabled {
+    background: #555;
+    box-shadow: 0 6px 0 #333;
+    cursor: not-allowed;
+}
+
+.menu-btn.small {
+    font-size: 1rem;
+    padding: 10px 30px;
+    background: linear-gradient(135deg, #7c4dff, #651fff);
+    box-shadow: 0 6px 0 #4527a0, 0 8px 20px rgba(0,0,0,0.4);
+}
+
+.menu-btn.small:hover {
+    box-shadow: 0 8px 0 #4527a0, 0 10px 24px rgba(0,0,0,0.4);
+}
+
+.footer-text {
+    position: absolute;
+    bottom: 30px;
+    color: #7c4dff;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    opacity: 0.7;
+    text-align: center;
+    line-height: 1.6;
+}
+
+/* HOW TO PLAY */
+#howToPlay h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2.5rem;
+    color: #4fc3f7;
+    margin-bottom: 30px;
+}
+
+.controls-grid {
+    display: flex;
+    gap: 60px;
+    margin-bottom: 30px;
+}
+
+.control-column {
+    background: rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 24px 32px;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+.control-column h3 {
+    font-family: 'Fredoka One', cursive;
+    color: #ff8f00;
+    margin-bottom: 12px;
+    font-size: 1.3rem;
+}
+
+.control-column p {
+    margin: 8px 0;
+    font-size: 1.1rem;
+}
+
+kbd {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 900;
+    font-size: 1rem;
+}
+
+.tip {
+    color: #b39ddb;
+    font-size: 1rem;
+    margin-bottom: 24px;
+    max-width: 500px;
+    text-align: center;
+}
+
+/* CHARACTER SELECT */
+#characterSelect h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2.2rem;
+    color: #4fc3f7;
+    margin-bottom: 20px;
+}
+
+.select-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 30px;
+    margin-bottom: 20px;
+}
+
+.player-select {
+    width: 160px;
+    text-align: center;
+}
+
+.player-select h3 {
+    font-family: 'Fredoka One', cursive;
+    color: #ff8f00;
+    margin-bottom: 10px;
+}
+
+.char-preview {
+    width: 140px;
+    height: 160px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 16px;
+    border: 3px solid rgba(255,255,255,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 5rem;
+    margin: 0 auto;
+}
+
+#p1Select .char-preview { border-color: rgba(79,195,247,0.5); }
+#p2Select .char-preview { border-color: rgba(255,111,0,0.5); }
+
+.char-name {
+    margin-top: 8px;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1rem;
+    color: #b39ddb;
+}
+
+.character-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    max-width: 420px;
+}
+
+.char-cell {
+    width: 92px;
+    height: 92px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 14px;
+    border: 3px solid rgba(255,255,255,0.12);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    font-size: 2.6rem;
+    position: relative;
+}
+
+.char-cell:hover {
+    background: rgba(255,255,255,0.12);
+    transform: scale(1.08);
+    border-color: rgba(255,255,255,0.3);
+}
+
+.char-cell.selected-p1 {
+    border-color: #4fc3f7;
+    background: rgba(79,195,247,0.15);
+    box-shadow: 0 0 20px rgba(79,195,247,0.3);
+}
+
+.char-cell.selected-p2 {
+    border-color: #ff6f00;
+    background: rgba(255,111,0,0.15);
+    box-shadow: 0 0 20px rgba(255,111,0,0.3);
+}
+
+.char-cell.selected-p1.selected-p2 {
+    border-color: #ab47bc;
+    box-shadow: 0 0 20px rgba(171,71,188,0.4);
+}
+
+.char-cell img {
+    height: 58px;
+    filter: drop-shadow(0 3px 4px rgba(0,0,0,0.4));
+}
+
+.char-preview img {
+    height: 130px;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+
+.winner-display img {
+    height: 160px;
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.5));
+}
+
+.char-cell-name {
+    font-size: 0.55rem;
+    font-weight: 900;
+    color: rgba(255,255,255,0.7);
+    margin-top: 2px;
+    text-align: center;
+    line-height: 1;
+}
+
+/* STAGE SELECT */
+.stage-select {
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.stage-select h3 {
+    font-family: 'Fredoka One', cursive;
+    color: #ff8f00;
+    margin-bottom: 10px;
+}
+
+.stage-options {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.stage-option {
+    padding: 10px 20px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.06);
+    border: 2px solid rgba(255,255,255,0.12);
+    cursor: pointer;
+    font-family: 'Fredoka One', cursive;
+    font-size: 0.85rem;
+    color: white;
+    transition: all 0.15s;
+}
+
+.stage-option:hover {
+    background: rgba(255,255,255,0.12);
+}
+
+.stage-option.selected {
+    border-color: #7c4dff;
+    background: rgba(124,77,255,0.2);
+    box-shadow: 0 0 16px rgba(124,77,255,0.3);
+}
+
+#characterSelect .menu-btn {
+    margin-top: 6px;
+}
+
+/* HUD */
+.hud {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 16px 40px;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.hud-player {
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 12px 24px;
+    min-width: 180px;
+    text-align: center;
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+#hudP1 { border-color: rgba(79,195,247,0.4); }
+#hudP2 { border-color: rgba(255,111,0,0.4); }
+
+.hud-name {
+    font-family: 'Fredoka One', cursive;
+    font-size: 1rem;
+    color: #b39ddb;
+    margin-bottom: 4px;
+}
+
+.hud-damage {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2.4rem;
+    color: white;
+    text-shadow: 0 0 20px rgba(255,255,255,0.3);
+    transition: color 0.2s;
+}
+
+.hud-damage.high {
+    color: #ff5252;
+    text-shadow: 0 0 20px rgba(255,82,82,0.5);
+}
+
+.hud-damage.medium {
+    color: #ffab40;
+    text-shadow: 0 0 20px rgba(255,171,64,0.4);
+}
+
+.hud-stocks {
+    margin-top: 6px;
+    font-size: 1.2rem;
+    letter-spacing: 4px;
+    min-height: 1.5rem;
+}
+
+.hud-center {
+    text-align: center;
+}
+
+.hud-timer {
+    font-family: 'Fredoka One', cursive;
+    font-size: 2rem;
+    color: white;
+    background: rgba(0,0,0,0.5);
+    border-radius: 50%;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255,255,255,0.15);
+}
+
+/* RESULTS */
+#resultsScreen {
+    background: rgba(10,5,25,0.85);
+}
+
+#resultsScreen h2 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 3rem;
+    color: #ff8f00;
+    text-shadow: 3px 3px 0 rgba(0,0,0,0.4);
+    margin-bottom: 20px;
+}
+
+.winner-display {
+    font-size: 6rem;
+    margin-bottom: 20px;
+    animation: winnerBounce 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes winnerBounce {
+    from { transform: scale(1) rotate(-3deg); }
+    to { transform: scale(1.1) rotate(3deg); }
+}
+
+.result-buttons {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+/* ANNOUNCER TEXT */
+.announcer {
+    position: fixed;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Fredoka One', cursive;
+    font-size: 5rem;
+    color: white;
+    text-shadow: 4px 4px 0 rgba(0,0,0,0.5), 0 0 40px rgba(255,111,0,0.5);
+    z-index: 100;
+    pointer-events: none;
+    animation: announceIn 0.3s ease-out;
+}
+
+@keyframes announceIn {
+    from { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+    to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
