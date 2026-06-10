@@ -141,9 +141,11 @@ body {
     position: absolute;
     bottom: 30px;
     color: #7c4dff;
-    font-size: 0.9rem;
-    letter-spacing: 3px;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
     opacity: 0.7;
+    text-align: center;
+    line-height: 1.6;
 }
 
 /* HOW TO PLAY */
@@ -290,6 +292,21 @@ kbd {
 .char-cell.selected-p1.selected-p2 {
     border-color: #ab47bc;
     box-shadow: 0 0 20px rgba(171,71,188,0.4);
+}
+
+.char-cell img {
+    height: 58px;
+    filter: drop-shadow(0 3px 4px rgba(0,0,0,0.4));
+}
+
+.char-preview img {
+    height: 130px;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+
+.winner-display img {
+    height: 160px;
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.5));
 }
 
 .char-cell-name {

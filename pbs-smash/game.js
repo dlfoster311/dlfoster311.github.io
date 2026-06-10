@@ -4,64 +4,283 @@
 // ============================================================
 
 // ---------- CHARACTER ROSTER ----------
+// All fighters are 100% legally distinct original characters. Any
+// resemblance to beloved public-television icons is purely educational.
 const CHARACTERS = [
     {
-        id: 'arthur', name: 'ARTHUR', emoji: '🐵', show: 'Arthur',
-        color: '#ffca28',
+        id: 'arthur', name: 'ARTY', tagline: 'A bespectacled aardvark who loves the library',
+        color: '#ffca28', size: 1.0,
         speed: 5.2, jump: 14, weight: 1.0, power: 1.0,
         special: 'book', specialName: 'Library Card Toss',
         taunt: 'Having fun isn\'t hard, with a library card!'
     },
     {
-        id: 'buster', name: 'BUSTER', emoji: '🐰', show: 'Arthur',
-        color: '#e0e0e0',
+        id: 'buster', name: 'BLASTER', tagline: 'A rabbit who believes in aliens',
+        color: '#e0e0e0', size: 1.0,
         speed: 5.0, jump: 16.5, weight: 0.85, power: 0.9,
         special: 'carrot', specialName: 'Carrot Lob',
         taunt: 'Aliens are totally real.'
     },
     {
-        id: 'dw', name: 'D.W.', emoji: '👧', show: 'Arthur',
-        color: '#f48fb1',
+        id: 'dw', name: 'D-DUB', tagline: 'A little sister with a big attitude',
+        color: '#f48fb1', size: 0.92,
         speed: 6.0, jump: 14.5, weight: 0.75, power: 0.85,
         special: 'tantrum', specialName: 'Tantrum Spin',
         taunt: 'I\'m telling MOM!'
     },
     {
-        id: 'clifford', name: 'CLIFFORD', emoji: '🐶', show: 'Clifford',
-        color: '#e53935',
+        id: 'clifford', name: 'BIG RED', tagline: 'An enormous crimson canine',
+        color: '#e53935', size: 1.18,
         speed: 3.8, jump: 12, weight: 1.5, power: 1.45,
         special: 'bark', specialName: 'BIG RED BARK',
         taunt: 'Woof.'
     },
     {
-        id: 'george', name: 'GEORGE', emoji: '🐒', show: 'Curious George',
-        color: '#8d6e63',
+        id: 'george', name: 'JORGE', tagline: 'A monkey with too many questions',
+        color: '#8d6e63', size: 0.95,
         speed: 5.8, jump: 16, weight: 0.8, power: 0.9,
         special: 'banana', specialName: 'Banana Bounce',
         taunt: '*curious monkey noises*'
     },
     {
-        id: 'wordgirl', name: 'WORDGIRL', emoji: '🦸', show: 'WordGirl',
-        color: '#d32f2f',
+        id: 'wordgirl', name: 'THESAURA', tagline: 'A superhero with a synonym for everything',
+        color: '#d32f2f', size: 1.0,
         speed: 6.5, jump: 15, weight: 0.9, power: 1.05,
         special: 'dash', specialName: 'Vocabulary Velocity',
         taunt: 'WORD UP!'
     },
     {
-        id: 'digit', name: 'DIGIT', emoji: '🐦', show: 'Cyberchase',
-        color: '#26c6da',
+        id: 'digit', name: 'GIGABYTE', tagline: 'A cybernetic bird from inside the internet',
+        color: '#ab47bc', size: 1.0,
         speed: 5.5, jump: 15.5, weight: 0.85, power: 0.95,
         special: 'zap', specialName: 'Cyber Beak Bolt',
         taunt: 'Yoiks!'
     },
     {
-        id: 'caillou', name: 'CAILLOU', emoji: '👦', show: 'Caillou',
-        color: '#fff176',
+        id: 'caillou', name: 'BALDWIN', tagline: 'A bald four-year-old with unresolved anger',
+        color: '#fdd835', size: 0.95,
         speed: 4.8, jump: 13.5, weight: 0.7, power: 1.15,
         special: 'scream', specialName: 'The Tantrum Heard Round The World',
         taunt: '*whining intensifies*'
     },
 ];
+
+// ---------- CHARACTER SPRITES ----------
+// Hand-drawn vector fighters. Each draws facing RIGHT in a local space
+// with feet at (0,0), head up around y=-160, width roughly ±45.
+const SPRITES = (() => {
+    const TAU = Math.PI * 2;
+    function ell(c, x, y, rx, ry, fill) {
+        c.fillStyle = fill;
+        c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, TAU); c.fill();
+    }
+    function rr(c, x, y, w, h, r, fill) {
+        c.fillStyle = fill;
+        c.beginPath();
+        c.moveTo(x + r, y);
+        c.arcTo(x + w, y, x + w, y + h, r);
+        c.arcTo(x + w, y + h, x, y + h, r);
+        c.arcTo(x, y + h, x, y, r);
+        c.arcTo(x, y, x + w, y, r);
+        c.closePath(); c.fill();
+    }
+    function eyes(c, x, y, gap, r = 4) {
+        ell(c, x - gap, y, r + 2, r + 3, '#fff');
+        ell(c, x + gap, y, r + 2, r + 3, '#fff');
+        ell(c, x - gap + 1.5, y + 0.5, r - 1, r, '#222');
+        ell(c, x + gap + 1.5, y + 0.5, r - 1, r, '#222');
+    }
+    function smile(c, x, y, r, color = '#5d4037') {
+        c.strokeStyle = color; c.lineWidth = 2.5; c.lineCap = 'round';
+        c.beginPath(); c.arc(x, y, r, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+    }
+    function star(c, x, y, r, fill) {
+        c.fillStyle = fill;
+        c.beginPath();
+        for (let i = 0; i < 10; i++) {
+            const a = -Math.PI / 2 + i * Math.PI / 5;
+            const rad = i % 2 === 0 ? r : r * 0.45;
+            c[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rad, y + Math.sin(a) * rad);
+        }
+        c.closePath(); c.fill();
+    }
+
+    return {
+        // ARTY — tan aardvark, round ears, yellow sweater, round glasses
+        arthur(c) {
+            const skin = '#eec9a2', sweater = '#fbc02d';
+            ell(c, -11, -3, 10, 5, '#6d4c41'); ell(c, 13, -3, 10, 5, '#6d4c41');
+            rr(c, -18, -30, 14, 28, 4, '#5c7fbe'); rr(c, 4, -30, 14, 28, 4, '#5c7fbe');
+            rr(c, -32, -76, 10, 34, 5, sweater); rr(c, 22, -76, 10, 34, 5, sweater);
+            ell(c, -27, -41, 6, 6, skin); ell(c, 27, -41, 6, 6, skin);
+            rr(c, -23, -80, 46, 52, 12, sweater);
+            c.fillStyle = '#fff';
+            c.beginPath(); c.moveTo(-10, -80); c.lineTo(0, -70); c.lineTo(10, -80); c.closePath(); c.fill();
+            ell(c, -15, -120, 9, 10, skin); ell(c, 15, -120, 9, 10, skin);
+            ell(c, -15, -120, 4.5, 5.5, '#d9a87c'); ell(c, 15, -120, 4.5, 5.5, '#d9a87c');
+            ell(c, 0, -97, 26, 24, skin);
+            c.strokeStyle = '#7a5230'; c.lineWidth = 3;
+            c.beginPath(); c.arc(-9, -99, 8, 0, TAU); c.stroke();
+            c.beginPath(); c.arc(10, -99, 8, 0, TAU); c.stroke();
+            c.beginPath(); c.moveTo(-1, -99); c.lineTo(2, -99); c.stroke();
+            ell(c, -8, -99, 2.5, 3, '#222'); ell(c, 11, -99, 2.5, 3, '#222');
+            ell(c, 1, -88, 4, 3, '#8d6e63');
+            smile(c, 0, -86, 7);
+        },
+
+        // BLASTER — pale rabbit, long ears, orange shirt
+        buster(c) {
+            const fur = '#ececec', inner = '#f8bbd0', shirt = '#ef5350';
+            ell(c, -11, -3, 10, 5, '#fafafa'); ell(c, 13, -3, 10, 5, '#fafafa');
+            c.strokeStyle = '#bdbdbd'; c.lineWidth = 2;
+            c.beginPath(); c.moveTo(-19, -4); c.lineTo(-3, -4); c.moveTo(5, -4); c.lineTo(21, -4); c.stroke();
+            rr(c, -18, -30, 14, 28, 4, '#5c7fbe'); rr(c, 4, -30, 14, 28, 4, '#5c7fbe');
+            rr(c, -32, -76, 10, 34, 5, shirt); rr(c, 22, -76, 10, 34, 5, shirt);
+            ell(c, -27, -41, 6, 6, fur); ell(c, 27, -41, 6, 6, fur);
+            rr(c, -23, -80, 46, 52, 12, shirt);
+            rr(c, -16, -158, 13, 48, 7, fur); rr(c, 4, -160, 13, 48, 7, fur);
+            rr(c, -12.5, -152, 6, 34, 3, inner); rr(c, 7.5, -154, 6, 34, 3, inner);
+            ell(c, 0, -97, 26, 25, fur);
+            eyes(c, 1, -100, 9, 4);
+            ell(c, 1, -88, 3.5, 2.5, '#e57373');
+            smile(c, 0, -86, 7, '#9e9e9e');
+            c.strokeStyle = '#bdbdbd'; c.lineWidth = 1.5;
+            c.beginPath(); c.moveTo(5, -88); c.lineTo(18, -91); c.moveTo(5, -86); c.lineTo(18, -84); c.stroke();
+        },
+
+        // D-DUB — small aardvark, pink dress, hair bow
+        dw(c) {
+            const skin = '#eec9a2', dress = '#f06292';
+            ell(c, -10, -3, 9, 5, '#d81b60'); ell(c, 12, -3, 9, 5, '#d81b60');
+            rr(c, -14, -28, 10, 26, 4, skin); rr(c, 4, -28, 10, 26, 4, skin);
+            c.fillStyle = dress;
+            c.beginPath(); c.moveTo(-26, -28); c.lineTo(26, -28); c.lineTo(15, -78); c.lineTo(-15, -78); c.closePath(); c.fill();
+            rr(c, -28, -74, 9, 30, 5, dress); rr(c, 19, -74, 9, 30, 5, dress);
+            ell(c, -24, -42, 5.5, 5.5, skin); ell(c, 24, -42, 5.5, 5.5, skin);
+            ell(c, 0, -78, 13, 6, '#fff');
+            ell(c, -12, -114, 7, 8, skin); ell(c, 12, -114, 7, 8, skin);
+            ell(c, -12, -114, 3.5, 4.5, '#d9a87c'); ell(c, 12, -114, 3.5, 4.5, '#d9a87c');
+            ell(c, 0, -94, 23, 22, skin);
+            c.fillStyle = '#ec407a';
+            c.beginPath(); c.moveTo(14, -112); c.lineTo(24, -118); c.lineTo(22, -106); c.closePath(); c.fill();
+            c.beginPath(); c.moveTo(14, -112); c.lineTo(6, -119); c.lineTo(8, -106); c.closePath(); c.fill();
+            ell(c, 14, -112, 3, 3, '#c2185b');
+            eyes(c, 2, -96, 8, 3.5);
+            ell(c, 1, -86, 3.5, 2.5, '#8d6e63');
+            smile(c, 0, -84, 6);
+        },
+
+        // BIG RED — enormous crimson canine
+        clifford(c) {
+            const red = '#e53935', dark = '#b71c1c';
+            c.strokeStyle = red; c.lineWidth = 8; c.lineCap = 'round';
+            c.beginPath(); c.moveTo(-32, -50); c.quadraticCurveTo(-48, -62, -44, -80); c.stroke();
+            rr(c, -34, -28, 17, 26, 7, red); rr(c, 16, -28, 17, 26, 7, red);
+            ell(c, -25, -3, 11, 5, dark); ell(c, 25, -3, 11, 5, dark);
+            ell(c, 0, -56, 37, 33, red);
+            ell(c, 6, -105, 30, 27, red);
+            ell(c, -20, -108, 8, 16, dark);
+            ell(c, 26, -122, 8, 14, dark);
+            ell(c, 28, -97, 14, 11, red);
+            ell(c, 39, -98, 6.5, 5.5, '#212121');
+            eyes(c, 6, -112, 9, 4);
+            smile(c, 26, -92, 7, '#7f0000');
+        },
+
+        // JORGE — curious brown monkey
+        george(c) {
+            const fur = '#795548', face = '#e7c39a';
+            ell(c, -11, -3, 10, 5, fur); ell(c, 13, -3, 10, 5, fur);
+            rr(c, -17, -28, 13, 26, 5, fur); rr(c, 4, -28, 13, 26, 5, fur);
+            rr(c, -33, -76, 10, 38, 5, fur); rr(c, 23, -76, 10, 38, 5, fur);
+            ell(c, -28, -37, 6, 6, face); ell(c, 28, -37, 6, 6, face);
+            rr(c, -22, -78, 44, 52, 14, fur);
+            ell(c, 0, -52, 14, 18, face);
+            ell(c, -24, -100, 8, 9, fur); ell(c, 24, -100, 8, 9, fur);
+            ell(c, -24, -100, 4, 5, face); ell(c, 24, -100, 4, 5, face);
+            ell(c, 0, -98, 25, 23, fur);
+            ell(c, 2, -93, 18, 16, face);
+            eyes(c, 2, -99, 7, 3.5);
+            ell(c, 0, -89, 1.5, 1.2, '#4e342e'); ell(c, 5, -89, 1.5, 1.2, '#4e342e');
+            smile(c, 2, -89, 9, '#4e342e');
+        },
+
+        // THESAURA — caped superhero with a star emblem
+        wordgirl(c) {
+            const skin = '#9c6b3f', suit = '#d32f2f', accent = '#fbc02d', capeC = '#b71c1c';
+            c.fillStyle = capeC;
+            c.beginPath(); c.moveTo(-16, -80); c.lineTo(-32, -14); c.lineTo(6, -22); c.lineTo(14, -80); c.closePath(); c.fill();
+            rr(c, -16, -30, 12, 24, 4, suit); rr(c, 4, -30, 12, 24, 4, suit);
+            rr(c, -17, -10, 14, 9, 4, capeC); rr(c, 3, -10, 14, 9, 4, capeC);
+            rr(c, -30, -76, 9, 34, 5, suit); rr(c, 21, -76, 9, 34, 5, suit);
+            ell(c, -25, -40, 5.5, 5.5, skin); ell(c, 25, -40, 5.5, 5.5, skin);
+            rr(c, -20, -80, 40, 52, 10, suit);
+            rr(c, -20, -39, 40, 8, 3, accent);
+            star(c, 0, -62, 10, accent);
+            ell(c, 0, -98, 22, 22, skin);
+            c.fillStyle = '#1b1b1b';
+            c.beginPath(); c.arc(0, -100, 23, Math.PI, 0); c.closePath(); c.fill();
+            ell(c, -19, -90, 6, 11, '#1b1b1b');
+            eyes(c, 3, -95, 7.5, 3.5);
+            smile(c, 2, -88, 6, '#4e342e');
+        },
+
+        // GIGABYTE — cybernetic bird with a giant beak
+        digit(c) {
+            const body = '#ab47bc', belly = '#ce93d8', beak = '#fb8c00', metal = '#26c6da';
+            c.fillStyle = body;
+            c.beginPath(); c.moveTo(-22, -50); c.lineTo(-42, -64); c.lineTo(-38, -42); c.closePath(); c.fill();
+            rr(c, -11, -22, 5, 22, 2, beak); rr(c, 7, -22, 5, 22, 2, beak);
+            ell(c, -7, -2, 9, 3.5, beak); ell(c, 11, -2, 9, 3.5, beak);
+            ell(c, 0, -52, 26, 31, body);
+            ell(c, 3, -47, 15, 21, belly);
+            ell(c, -17, -55, 10, 17, metal);
+            ell(c, 2, -94, 21, 19, body);
+            c.strokeStyle = metal; c.lineWidth = 2.5;
+            c.beginPath(); c.moveTo(0, -110); c.lineTo(-5, -126); c.stroke();
+            ell(c, -5, -128, 4.5, 4.5, metal);
+            eyes(c, 4, -98, 8, 4.5);
+            c.fillStyle = beak;
+            c.beginPath(); c.moveTo(15, -96); c.lineTo(43, -90); c.lineTo(15, -84); c.closePath(); c.fill();
+            c.fillStyle = '#e65100';
+            c.beginPath(); c.moveTo(15, -83); c.lineTo(34, -82); c.lineTo(15, -77); c.closePath(); c.fill();
+        },
+
+        // BALDWIN — bald kid, yellow shirt, perpetually upset
+        caillou(c) {
+            const skin = '#ffd6b0', shirt = '#fdd835', trim = '#e53935', shorts = '#3f51b5';
+            ell(c, -11, -3, 10, 5, '#fafafa'); ell(c, 13, -3, 10, 5, '#fafafa');
+            rr(c, -16, -28, 12, 26, 4, skin); rr(c, 4, -28, 12, 26, 4, skin);
+            rr(c, -18, -46, 36, 19, 6, shorts);
+            rr(c, -29, -74, 9, 32, 5, shirt); rr(c, 20, -74, 9, 32, 5, shirt);
+            ell(c, -24, -40, 5.5, 5.5, skin); ell(c, 24, -40, 5.5, 5.5, skin);
+            rr(c, -20, -80, 40, 40, 10, shirt);
+            rr(c, -20, -80, 40, 7, 3, trim);
+            ell(c, 0, -102, 24, 23, skin);
+            ell(c, -23, -100, 4, 6, skin); ell(c, 23, -100, 4, 6, skin);
+            c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 3; c.lineCap = 'round';
+            c.beginPath(); c.arc(-2, -104, 17, 1.25 * Math.PI, 1.6 * Math.PI); c.stroke();
+            eyes(c, 2, -102, 7.5, 3.5);
+            c.strokeStyle = '#5d4037'; c.lineWidth = 2.5;
+            c.beginPath(); c.moveTo(-9, -112); c.lineTo(-2, -109); c.moveTo(13, -112); c.lineTo(6, -109); c.stroke();
+            c.beginPath(); c.arc(2, -84, 6, 1.15 * Math.PI, 1.85 * Math.PI); c.stroke();
+        },
+    };
+})();
+
+// Pre-render each fighter to an offscreen canvas for UI and indicators
+const spriteCache = {};
+function buildSpriteCache() {
+    for (const ch of CHARACTERS) {
+        const cv = document.createElement('canvas');
+        cv.width = 130; cv.height = 185;
+        const c = cv.getContext('2d');
+        c.translate(65, 178);
+        SPRITES[ch.id](c);
+        spriteCache[ch.id] = cv;
+    }
+}
+buildSpriteCache();
 
 // ---------- STAGES ----------
 const W = 1280, H = 720;
@@ -108,6 +327,13 @@ let scale = 1, offsetX = 0, offsetY = 0;
 let p1Char = null, p2Char = null, nextPick = 1;
 let selectedStage = 0;
 let game = null;
+let vsCPU = false;
+
+function setMode(cpu) {
+    vsCPU = cpu;
+    document.getElementById('p2Heading').textContent = cpu ? 'CPU' : 'Player 2';
+    showScreen('characterSelect');
+}
 
 const GRAVITY = 0.75;
 const FRICTION = 0.82;
@@ -172,7 +398,8 @@ function buildCharacterSelect() {
         const cell = document.createElement('div');
         cell.className = 'char-cell';
         cell.id = 'cell-' + c.id;
-        cell.innerHTML = `<span>${c.emoji}</span><span class="char-cell-name">${c.name}</span>`;
+        cell.title = c.tagline;
+        cell.innerHTML = `<img src="${spriteCache[c.id].toDataURL()}" alt="${c.name}"><span class="char-cell-name">${c.name}</span>`;
         cell.onclick = () => pickCharacter(i);
         grid.appendChild(cell);
     });
@@ -194,14 +421,15 @@ function buildCharacterSelect() {
 
 function pickCharacter(i) {
     const c = CHARACTERS[i];
+    const img = `<img src="${spriteCache[c.id].toDataURL()}" alt="${c.name}">`;
     if (nextPick === 1) {
         p1Char = i;
-        document.getElementById('p1Preview').textContent = c.emoji;
+        document.getElementById('p1Preview').innerHTML = img;
         document.getElementById('p1Name').textContent = c.name;
         nextPick = 2;
     } else {
         p2Char = i;
-        document.getElementById('p2Preview').textContent = c.emoji;
+        document.getElementById('p2Preview').innerHTML = img;
         document.getElementById('p2Name').textContent = c.name;
         nextPick = 1;
     }
@@ -215,16 +443,81 @@ function pickCharacter(i) {
 
 // ---------- FIGHTER ----------
 class Fighter {
-    constructor(charIndex, playerNum, x) {
+    constructor(charIndex, playerNum, x, cpu = false) {
         this.char = CHARACTERS[charIndex];
         this.playerNum = playerNum;
         this.keys = playerNum === 1 ? P1_KEYS : P2_KEYS;
+        this.cpu = cpu;
+        this.aiInput = { left: false, right: false, jump: false, attack: false, special: false };
         this.w = 56;
         this.h = 64;
         this.spawnX = x;
         this.respawn(true);
         this.stocks = STOCKS;
         this.damage = 0;
+    }
+
+    readInput() {
+        if (this.cpu) return this.aiInput;
+        return {
+            left: !!keys[this.keys.left],
+            right: !!keys[this.keys.right],
+            jump: !!keys[this.keys.jump],
+            attack: !!keys[this.keys.attack],
+            special: !!keys[this.keys.special],
+        };
+    }
+
+    cpuThink(g) {
+        const inp = { left: false, right: false, jump: false, attack: false, special: false };
+        const foe = g.fighters.find(f => f !== this);
+        if (this.dead || !foe || foe.dead) { this.aiInput = inp; return; }
+
+        const mains = STAGES[selectedStage].platforms.filter(p => p.main);
+        const left = Math.min(...mains.map(p => p.x));
+        const right = Math.max(...mains.map(p => p.x + p.w));
+        const mainY = mains[0].y;
+        const dx = foe.x - this.x;
+        const dy = foe.y - this.y;
+
+        const offStage = this.x < left - 5 || this.x > right + 5 || this.y > mainY + 40;
+        if (offStage) {
+            // recovery: head back to center, burn jumps while falling
+            const cx = (left + right) / 2;
+            if (cx < this.x) inp.left = true; else inp.right = true;
+            if (this.vy > 1 && this.jumpsLeft > 0 && Math.random() < 0.35) inp.jump = true;
+        } else {
+            // approach until in melee range
+            if (Math.abs(dx) > 55) {
+                if (dx > 0) inp.right = true; else inp.left = true;
+            } else if (Math.abs(dx) < 25 && Math.random() < 0.04) {
+                // occasionally create space
+                if (dx > 0) inp.left = true; else inp.right = true;
+            }
+            // chase upward
+            if (dy < -90 && this.onGround && Math.random() < 0.1) inp.jump = true;
+            if (Math.random() < 0.004) inp.jump = true;
+            // swing when in range (turn toward foe so the hit lands)
+            if (Math.abs(dx) < 75 && Math.abs(dy) < 65 && Math.random() < 0.12) {
+                inp.attack = true;
+                if (dx > 0) inp.right = true; else if (dx < 0) inp.left = true;
+            }
+            // specials: projectiles from range, bursts up close
+            if (this.specialCooldown <= 0 && Math.random() < 0.03) {
+                const ranged = ['book', 'carrot', 'banana', 'zap'].includes(this.char.special);
+                const ok = ranged ? Math.abs(dx) > 110 && Math.abs(dy) < 80 : Math.abs(dx) < 150;
+                if (ok) {
+                    inp.special = true;
+                    if (dx > 0) inp.right = true; else if (dx < 0) inp.left = true;
+                }
+            }
+            // don't walk off the edge unless edge-guarding a nearby foe
+            const nextX = this.x + (inp.right ? 35 : inp.left ? -35 : 0);
+            if (this.onGround && (nextX < left + 15 || nextX > right - 15) && Math.abs(dx) > 90) {
+                inp.left = inp.right = false;
+            }
+        }
+        this.aiInput = inp;
     }
 
     respawn(initial = false) {
@@ -274,13 +567,15 @@ class Fighter {
         if (inHitstun) this.hitstun--;
 
         // --- movement input ---
+        if (this.cpu) this.cpuThink(g);
+        const inp = this.readInput();
         if (!inHitstun && this.dashTimer <= 0) {
             const spd = this.char.speed;
-            if (keys[this.keys.left]) {
+            if (inp.left) {
                 this.vx -= this.onGround ? spd * 0.3 : spd * 0.12;
                 this.facing = -1;
             }
-            if (keys[this.keys.right]) {
+            if (inp.right) {
                 this.vx += this.onGround ? spd * 0.3 : spd * 0.12;
                 this.facing = 1;
             }
@@ -288,7 +583,7 @@ class Fighter {
             this.vx = Math.max(-maxSpd, Math.min(maxSpd, this.vx));
 
             // jump (with edge detection so holding doesn't multi-jump)
-            if (keys[this.keys.jump]) {
+            if (inp.jump) {
                 if (!this.jumpHeld && this.jumpsLeft > 0) {
                     this.vy = -this.char.jump * (this.jumpsLeft === 2 ? 1 : 0.88);
                     this.jumpsLeft--;
@@ -302,13 +597,13 @@ class Fighter {
             }
 
             // attack
-            if (keys[this.keys.attack] && this.attackCooldown <= 0) {
+            if (inp.attack && this.attackCooldown <= 0) {
                 this.attackTimer = 10;
                 this.attackCooldown = 24;
             }
 
             // special
-            if (keys[this.keys.special] && this.specialCooldown <= 0) {
+            if (inp.special && this.specialCooldown <= 0) {
                 this.doSpecial(g);
             }
         }
@@ -449,36 +744,13 @@ class Fighter {
         const px = offsetX + this.x * scale;
         const py = offsetY + this.y * scale;
 
+        // shadow + player ring
         ctx.save();
         ctx.translate(px, py);
-
-        // shadow
         ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.beginPath();
         ctx.ellipse(0, 2 * scale, 26 * scale * this.squash, 6 * scale, 0, 0, Math.PI * 2);
         ctx.fill();
-
-        // spin rotation for tantrum
-        if (this.spinTimer > 0) {
-            ctx.rotate((this.spinTimer * 0.8) % (Math.PI * 2));
-        }
-
-        // dash trail
-        if (this.dashTimer > 0) {
-            ctx.shadowColor = this.char.color;
-            ctx.shadowBlur = 30 * scale;
-        }
-
-        // body (emoji)
-        ctx.scale(this.facing * (1 / this.squash) * 0.9 + this.facing * 0.1, this.squash);
-        ctx.font = `${56 * scale}px serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-
-        // player ring indicator
-        ctx.restore();
-        ctx.save();
-        ctx.translate(px, py);
         ctx.strokeStyle = this.playerNum === 1 ? '#4fc3f7' : '#ff6f00';
         ctx.lineWidth = 3 * scale;
         ctx.beginPath();
@@ -486,14 +758,22 @@ class Fighter {
         ctx.stroke();
         ctx.restore();
 
+        // body sprite (squash stretches height, widens on landing)
         ctx.save();
-        ctx.translate(px, py - (this.h / 2) * scale * this.squash);
-        if (this.spinTimer > 0) ctx.rotate(this.spinTimer * 0.6);
-        ctx.scale(this.facing, 1);
-        ctx.font = `${58 * scale * (2 - this.squash)}px serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(this.char.emoji, 0, 0);
+        if (this.spinTimer > 0) {
+            ctx.translate(px, py - 48 * scale);
+            ctx.rotate(this.spinTimer * 0.6);
+            ctx.translate(0, 48 * scale);
+        } else {
+            ctx.translate(px, py);
+        }
+        if (this.dashTimer > 0) {
+            ctx.shadowColor = this.char.color;
+            ctx.shadowBlur = 30 * scale;
+        }
+        const sz = 0.48 * this.char.size;
+        ctx.scale(scale * sz * this.facing * (2 - this.squash), scale * sz * this.squash);
+        SPRITES[this.char.id](ctx);
         ctx.restore();
 
         // attack swing visual
@@ -577,7 +857,7 @@ class Game {
     constructor() {
         this.fighters = [
             new Fighter(p1Char, 1, W * 0.32),
-            new Fighter(p2Char, 2, W * 0.68),
+            new Fighter(p2Char, 2, W * 0.68, vsCPU),
         ];
         this.projectiles = [];
         this.particles = [];
@@ -589,7 +869,7 @@ class Game {
         this.countdown = 180; // 3..2..1..GO
 
         document.getElementById('hudP1Name').textContent = this.fighters[0].char.name;
-        document.getElementById('hudP2Name').textContent = this.fighters[1].char.name;
+        document.getElementById('hudP2Name').textContent = this.fighters[1].char.name + (vsCPU ? ' (CPU)' : '');
         this.updateHUD();
     }
 
@@ -639,7 +919,7 @@ class Game {
             const disp = document.getElementById('winnerDisplay');
             if (winner) {
                 txt.textContent = `${winner.char.name} WINS!`;
-                disp.textContent = winner.char.emoji;
+                disp.innerHTML = `<img src="${spriteCache[winner.char.id].toDataURL()}" alt="${winner.char.name}">`;
                 disp.title = winner.char.taunt;
             } else {
                 txt.textContent = 'SUDDEN TIE!';
@@ -816,8 +1096,8 @@ class Game {
                 ctx.font = `${30 * scale}px serif`;
                 ctx.textAlign = 'center';
                 ctx.fillText('🔻', ix, offsetY + 40 * scale);
-                ctx.font = `${22 * scale}px serif`;
-                ctx.fillText(f.char.emoji, ix, offsetY + 70 * scale);
+                const iw = 34 * scale, ih = iw * (185 / 130);
+                ctx.drawImage(spriteCache[f.char.id], ix - iw / 2, offsetY + 48 * scale, iw, ih);
             }
         }
     }
