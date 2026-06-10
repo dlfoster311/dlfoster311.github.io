@@ -352,6 +352,32 @@ window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 const P1_KEYS = { left: 'a', right: 'd', jump: 'w', attack: 'f', special: 'g' };
 const P2_KEYS = { left: 'arrowleft', right: 'arrowright', jump: 'arrowup', attack: 'k', special: 'l' };
 
+// ---------- AUDIO ----------
+const SND = (typeof AudioEngine !== 'undefined') ? AudioEngine : {
+    init: () => false, resume() {}, toggleMute: () => false,
+    playMenuTheme() {}, playBattleTheme() {}, stopMusic() {}, fanfare() {},
+    sfx() {}, say() {}, muted: false,
+};
+let currentMusic = '';
+
+function setMusic(kind) {
+    if (currentMusic === kind) return;
+    currentMusic = kind;
+    if (kind === 'menu') SND.playMenuTheme();
+    else if (kind === 'battle') SND.playBattleTheme();
+    else if (kind === 'fanfare') SND.fanfare();
+    else SND.stopMusic();
+}
+
+// browsers require a user gesture before audio can start
+function ensureAudio() {
+    if (!SND.init()) return;
+    SND.resume();
+    if (currentMusic === '' && !game) setMusic('menu');
+}
+window.addEventListener('pointerdown', ensureAudio);
+window.addEventListener('keydown', ensureAudio);
+
 // ---------- CANVAS SIZING ----------
 function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -371,7 +397,12 @@ function showScreen(id) {
         game.running = false;
         game = null;
     }
-    if (id !== 'gameScreen') drawMenuBackground();
+    if (id !== 'gameScreen') {
+        SND.sfx('click');
+        if (id === 'titleScreen' || id === 'howToPlay' || id === 'characterSelect') setMusic('menu');
+        if (id === 'characterSelect') SND.say('Choose your fighter!');
+        drawMenuBackground();
+    }
 }
 
 function drawMenuBackground() {
@@ -421,6 +452,8 @@ function buildCharacterSelect() {
 
 function pickCharacter(i) {
     const c = CHARACTERS[i];
+    SND.sfx('select');
+    SND.say(c.name + '!', { rate: 0.95 });
     const img = `<img src="${spriteCache[c.id].toDataURL()}" alt="${c.name}">`;
     if (nextPick === 1) {
         p1Char = i;
@@ -449,7 +482,7 @@ class Fighter {
         this.keys = playerNum === 1 ? P1_KEYS : P2_KEYS;
         this.cpu = cpu;
         this.aiInput = { left: false, right: false, jump: false, attack: false, special: false };
-        this.w = 56;
+        this.w = 46;
         this.h = 64;
         this.spawnX = x;
         this.respawn(true);
@@ -498,7 +531,7 @@ class Fighter {
             if (dy < -90 && this.onGround && Math.random() < 0.1) inp.jump = true;
             if (Math.random() < 0.004) inp.jump = true;
             // swing when in range (turn toward foe so the hit lands)
-            if (Math.abs(dx) < 75 && Math.abs(dy) < 65 && Math.random() < 0.12) {
+            if (Math.abs(dx) < 62 && Math.abs(dy) < 60 && Math.random() < 0.12) {
                 inp.attack = true;
                 if (dx > 0) inp.right = true; else if (dx < 0) inp.left = true;
             }
@@ -572,11 +605,12 @@ class Fighter {
         if (!inHitstun && this.dashTimer <= 0) {
             const spd = this.char.speed;
             if (inp.left) {
-                this.vx -= this.onGround ? spd * 0.3 : spd * 0.12;
+                // turn assist: braking is stronger than accelerating
+                this.vx -= (this.onGround ? spd * 0.3 : spd * 0.18) * (this.vx > 0 ? 1.8 : 1);
                 this.facing = -1;
             }
             if (inp.right) {
-                this.vx += this.onGround ? spd * 0.3 : spd * 0.12;
+                this.vx += (this.onGround ? spd * 0.3 : spd * 0.18) * (this.vx < 0 ? 1.8 : 1);
                 this.facing = 1;
             }
             const maxSpd = this.spinTimer > 0 ? spd * 1.4 : spd;
@@ -589,6 +623,7 @@ class Fighter {
                     this.jumpsLeft--;
                     this.onGround = false;
                     this.squash = 1.25;
+                    SND.sfx('jump');
                     g.spawnParticles(this.x, this.y, 4, '#ffffff', 2);
                 }
                 this.jumpHeld = true;
@@ -616,6 +651,7 @@ class Fighter {
         this.y += this.vy;
 
         // --- platform collision ---
+        const wasGrounded = this.onGround;
         this.onGround = false;
         const stage = STAGES[selectedStage];
         for (const p of stage.platforms) {
@@ -623,13 +659,16 @@ class Fighter {
             const falling = this.vy >= 0;
             const feetPrev = this.y - this.vy;
             if (withinX && falling && feetPrev <= p.y + 4 && this.y >= p.y && this.y <= p.y + p.h + this.vy + 4) {
-                // drop-through soft platforms by holding down... keep simple: main is solid, others pass holding nothing
                 this.y = p.y;
                 this.vy = 0;
-                if (!this.onGround) this.squash = Math.min(this.squash, 0.8);
                 this.onGround = true;
                 this.jumpsLeft = 2;
             }
+        }
+        if (this.onGround && !wasGrounded) {
+            // just landed
+            this.squash = 0.8;
+            SND.sfx('land');
         }
 
         // squash/stretch recovery
@@ -637,12 +676,14 @@ class Fighter {
 
         // --- melee hit detection ---
         if (this.attackTimer > 4 && this.attackTimer <= 8) {
-            const reach = 48;
+            // hitbox starts at the body's edge and reaches one arm's length —
+            // a swing should only land when it visibly looks like it connects
+            const reach = 42;
             const hb = {
-                x: this.facing === 1 ? this.x : this.x - reach - this.w / 2,
-                y: this.y - this.h,
-                w: reach + this.w / 2,
-                h: this.h
+                x: this.facing === 1 ? this.x + this.w * 0.2 : this.x - this.w * 0.2 - reach,
+                y: this.y - this.h + 6,
+                w: reach,
+                h: this.h - 10
             };
             const foe = g.fighters.find(f => f !== this);
             if (foe && !foe.dead && foe.invuln <= 0 && rectsOverlap(hb, foe.hurtbox)) {
@@ -677,6 +718,11 @@ class Fighter {
 
     doSpecial(g) {
         const c = this.char;
+        const SPECIAL_SFX = {
+            book: 'projectile', carrot: 'projectile', banana: 'projectile', zap: 'projectile',
+            bark: 'bark', scream: 'scream', dash: 'dash', tantrum: 'spin',
+        };
+        SND.sfx(SPECIAL_SFX[c.special]);
         switch (c.special) {
             case 'book':
                 g.projectiles.push(new Projectile(this, this.x + this.facing * 40, this.y - 40,
@@ -779,7 +825,7 @@ class Fighter {
         // attack swing visual
         if (this.attackTimer > 4) {
             ctx.save();
-            ctx.translate(px + this.facing * 45 * scale, py - 35 * scale);
+            ctx.translate(px + this.facing * 32 * scale, py - 35 * scale);
             ctx.font = `${34 * scale}px serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -826,7 +872,7 @@ class Projectile {
         const foe = g.fighters.find(f => f !== this.owner);
         if (foe && !foe.dead && foe.invuln <= 0) {
             const hb = foe.hurtbox;
-            if (this.x > hb.x - 12 && this.x < hb.x + hb.w + 12 && this.y > hb.y - 12 && this.y < hb.y + hb.h + 12) {
+            if (this.x > hb.x - 8 && this.x < hb.x + hb.w + 8 && this.y > hb.y - 8 && this.y < hb.y + hb.h + 8) {
                 g.hit(this.owner, foe, this.dmg, this.kb, Math.sign(this.vx) || this.owner.facing, -6);
                 this.life = 0;
             }
@@ -839,6 +885,7 @@ class Projectile {
     draw() {
         ctx.save();
         ctx.translate(offsetX + this.x * scale, offsetY + this.y * scale);
+        ctx.scale(this.vx < 0 ? -1 : 1, 1);
         ctx.rotate(this.rot);
         ctx.font = `${30 * scale}px serif`;
         ctx.textAlign = 'center';
@@ -882,6 +929,7 @@ class Game {
         victim.hitstun = Math.min(40, 8 + kb * 0.8);
         victim.invuln = 8;
         this.freeze = Math.min(8, 2 + dmg * 0.4); // hitstop for juice
+        SND.sfx('hit', Math.min(2, 0.6 + dmg / 8 + victim.damage / 120));
         this.spawnParticles(victim.x, victim.y - 40, 8, attacker.char.color, 5);
         this.updateHUD();
     }
@@ -897,6 +945,8 @@ class Game {
             20, '#ffffff', 9
         );
         this.announce(f.stocks > 0 ? 'KO!' : 'GAME!', 900);
+        SND.sfx('ko');
+        SND.say(f.stocks > 0 ? 'K O!' : 'GAME!', { rate: 0.85, pitch: 0.5 });
         this.updateHUD();
         if (f.stocks <= 0) this.endGame();
     }
@@ -921,10 +971,13 @@ class Game {
                 txt.textContent = `${winner.char.name} WINS!`;
                 disp.innerHTML = `<img src="${spriteCache[winner.char.id].toDataURL()}" alt="${winner.char.name}">`;
                 disp.title = winner.char.taunt;
+                SND.say(`The winner is... ${winner.char.name}!`, { rate: 0.9, interrupt: false });
             } else {
                 txt.textContent = 'SUDDEN TIE!';
                 disp.textContent = '🤝';
+                SND.say('It\'s a tie!', { interrupt: false });
             }
+            setMusic('fanfare');
             showScreen('resultsScreen');
         }, 1400);
     }
@@ -976,8 +1029,15 @@ class Game {
             this.countdown--;
             const now = Math.ceil(this.countdown / 60);
             if (now !== prev || this.countdown === 179) {
-                if (this.countdown === 0) this.announce('GO!', 600);
-                else this.announce(String(now), 500);
+                if (this.countdown === 0) {
+                    this.announce('GO!', 600);
+                    SND.sfx('countdown', true);
+                    SND.say('GO!', { rate: 1.1, pitch: 0.6 });
+                    setMusic('battle');
+                } else {
+                    this.announce(String(now), 500);
+                    SND.sfx('countdown');
+                }
             }
             return;
         }
@@ -1115,6 +1175,8 @@ function roundRect(x, y, w, h, r) {
 
 // ---------- MAIN LOOP ----------
 function startFight() {
+    SND.sfx('select');
+    setMusic('none');
     showScreen('gameScreen');
     game = new Game();
     requestAnimationFrame(gameLoop);
@@ -1130,3 +1192,10 @@ function gameLoop() {
 // ---------- INIT ----------
 buildCharacterSelect();
 drawMenuBackground();
+const muteBtn = document.getElementById('muteBtn');
+if (muteBtn) {
+    muteBtn.onclick = (e) => {
+        e.stopPropagation();
+        muteBtn.textContent = SND.toggleMute() ? '🔇' : '🔊';
+    };
+}

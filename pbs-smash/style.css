@@ -24,6 +24,26 @@ body {
     z-index: 0;
 }
 
+#muteBtn {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 200;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.45);
+    font-size: 1.4rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+#muteBtn:hover {
+    background: rgba(0,0,0,0.7);
+    transform: scale(1.08);
+}
+
 .screen {
     position: fixed;
     top: 0;
