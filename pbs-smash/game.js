@@ -364,7 +364,7 @@ function setMusic(kind) {
     if (currentMusic === kind) return;
     currentMusic = kind;
     if (kind === 'menu') SND.playMenuTheme();
-    else if (kind === 'battle') SND.playBattleTheme();
+    else if (kind === 'battle') SND.playBattleTheme(selectedStage);
     else if (kind === 'fanfare') SND.fanfare();
     else SND.stopMusic();
 }

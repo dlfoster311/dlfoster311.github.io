@@ -99,8 +99,18 @@ const AudioEngine = (() => {
         src.start(time);
     }
 
-    // big orchestral-ish lead: detuned saw stack + octave
-    function lead(time, freq, dur, gain = 0.16) {
+    // lead voices: 'brass' wall of saws, 'chip' bright square, 'soft' mellow triangle
+    function lead(time, freq, dur, gain = 0.16, style = 'brass') {
+        if (style === 'chip') {
+            tone(time, freq, dur, { type: 'square', gain: gain * 0.9, release: 0.1 });
+            tone(time, freq, dur, { type: 'square', gain: gain * 0.4, detune: 9, release: 0.1 });
+            return;
+        }
+        if (style === 'soft') {
+            tone(time, freq, dur, { type: 'triangle', gain: gain * 1.3, release: 0.15 });
+            tone(time, freq * 2, dur, { type: 'sine', gain: gain * 0.35, release: 0.15 });
+            return;
+        }
         tone(time, freq, dur, { type: 'sawtooth', gain, detune: -7, release: 0.12 });
         tone(time, freq, dur, { type: 'sawtooth', gain, detune: 7, release: 0.12 });
         tone(time, freq, dur, { type: 'square', gain: gain * 0.45, release: 0.12 });
@@ -168,23 +178,92 @@ const AudioEngine = (() => {
         crashBars: [0, 8],
     };
 
-    // ===== "RECESS RIOT" — faster, tenser battle loop =====
-    const BATTLE = {
-        bpm: 170,
+    // ===== STAGE THEMES — one per map, lighter than the title anthem =====
+
+    // Elwood City: "SUNNY SIDEWALK" — bouncy, cheerful suburb stroll
+    const SONG_ELWOOD = {
+        bpm: 126,
         bars: 8,
+        leadType: 'chip',
+        leadGain: 0.12,
         melody: (
-            'C5 C5 . G4 C5 . D#5 .|D5 C5 D5 . F5 . D#5 D5|D#5 D#5 . C5 D#5 . G5 .|F5 D#5 D5 . C5 . D5 D#5|' +
-            'F5 F5 . D5 F5 . G#5 .|G5 F5 G5 . A#5 . G#5 G5|G5 - D5 - B4 - D5 -|G5 G5 F5 D5 B4 D5 G4 .'
+            'B4 . D5 B4 G4 . A4 B4|C5 . E5 C5 A4 . B4 C5|B4 . D5 G5 . F#5 E5 D5|A4 B4 C5 A4 D5 - - .|' +
+            'B4 . D5 B4 G4 . A4 B4|C5 . E5 G5 . E5 C5 E5|D5 G5 - F#5 E5 - D5 -|G5 - - - . . D5 .'
         ).split('|').map(b => b.trim().split(/\s+/)),
-        bass: ['C2', 'C2', 'D#2', 'D#2', 'F2', 'F2', 'G2', 'G2'],
+        bass: ['G2', 'E2', 'C2', 'D2', 'G2', 'C2', 'D2', 'G2'],
         chords: [
-            ['C3', 'min'], ['C3', 'min'], ['D#3', 'maj'], ['D#3', 'maj'],
-            ['F3', 'min'], ['F3', 'min'], ['G3', 'maj'], ['G3', 'maj'],
+            ['G3', 'maj'], ['E3', 'min'], ['C3', 'maj'], ['D3', 'maj'],
+            ['G3', 'maj'], ['C3', 'maj'], ['D3', 'maj'], ['G3', 'maj'],
+        ],
+        drums: { kick: 'x...x...', snare: '....x...', hat: 'x.x.x.x.' },
+        timpaniBars: [],
+        crashBars: [],
+        ambient(barTime, bar, stepDur) {
+            // songbirds
+            if (Math.random() < 0.4) {
+                const t = barTime + Math.random() * stepDur * 6;
+                const f = 2200 + Math.random() * 1200;
+                tone(t, f, 0.07, { type: 'sine', gain: 0.05, attack: 0.01, slide: 500 });
+                tone(t + 0.09, f * 1.15, 0.06, { type: 'sine', gain: 0.04, attack: 0.01, slide: -400 });
+            }
+        },
+    };
+
+    // Birdwell Island: "BIG BEACH DAY" — laid-back island skank
+    const SONG_BIRDWELL = {
+        bpm: 112,
+        bars: 8,
+        leadType: 'soft',
+        leadGain: 0.11,
+        chordStyle: 'offbeat',
+        melody: (
+            'E5 - . G5 E5 - C5 -|A4 - C5 - F5 - E5 -|D5 - . B4 D5 - G5 -|E5 - C5 - G4 - - .|' +
+            'A4 - C5 E5 A5 - G5 -|F5 - E5 - D5 - E5 -|C5 - E5 - A4 - C5 -|D5 - B4 - G4 - . .'
+        ).split('|').map(b => b.trim().split(/\s+/)),
+        bass: ['C2', 'F2', 'G2', 'C2', 'F2', 'G2', 'A2', 'G2'],
+        chords: [
+            ['C3', 'maj'], ['F3', 'maj'], ['G3', 'maj'], ['C3', 'maj'],
+            ['F3', 'maj'], ['G3', 'maj'], ['A3', 'min'], ['G3', 'maj'],
+        ],
+        drums: { kick: 'x...x...', snare: '....x...', hat: 'x.xx.x.x' },
+        timpaniBars: [],
+        crashBars: [],
+        ambient(barTime, bar, stepDur) {
+            // rolling surf every fourth bar
+            if (bar % 4 === 0) {
+                noise(barTime, stepDur * 8, { gain: 0.05, filterType: 'lowpass', freq: 600, slide: 500, bus: musicBus });
+            }
+        },
+    };
+
+    // Cyberspace: "FIREWALL FRENZY" — driving synth arpeggios
+    const SONG_CYBER = {
+        bpm: 150,
+        bars: 8,
+        leadType: 'chip',
+        leadGain: 0.1,
+        melody: (
+            'A4 C5 E5 A5 E5 C5 E5 A4|F4 A4 C5 F5 C5 A4 C5 F4|C5 E5 G5 C6 G5 E5 G5 C5|B4 D5 G5 B5 G5 D5 B4 G4|' +
+            'A4 C5 E5 A5 E5 C5 A4 E5|F5 - E5 - C5 - A4 -|D5 F5 A5 D6 - A5 F5 D5|E5 - G#5 - B5 - E5 .'
+        ).split('|').map(b => b.trim().split(/\s+/)),
+        bass: ['A1', 'F2', 'C2', 'G2', 'A1', 'F2', 'D2', 'E2'],
+        chords: [
+            ['A2', 'min'], ['F3', 'maj'], ['C3', 'maj'], ['G3', 'maj'],
+            ['A2', 'min'], ['F3', 'maj'], ['D3', 'min'], ['E3', 'maj'],
         ],
         drums: { kick: 'x..x..x.', snare: '....x...', hat: 'xxxxxxxx' },
-        timpaniBars: [7],
+        timpaniBars: [],
         crashBars: [0],
+        ambient(barTime, bar, stepDur) {
+            // stray data packets
+            if (Math.random() < 0.5) {
+                const t = barTime + Math.random() * stepDur * 7;
+                tone(t, 1200 + Math.random() * 2000, 0.05, { type: 'square', gain: 0.035, attack: 0.005, slide: 900 });
+            }
+        },
     };
+
+    const STAGE_SONGS = [SONG_ELWOOD, SONG_BIRDWELL, SONG_CYBER];
 
     function scheduleBar(song, barIndex, barTime) {
         const stepDur = 60 / song.bpm / 2; // 8th note
@@ -197,7 +276,7 @@ const AudioEngine = (() => {
             if (!tok || tok === '.' || tok === '-') continue;
             let len = 1;
             while (s + len < 8 && mel[s + len] === '-') len++;
-            lead(barTime + s * stepDur, NOTE[tok], stepDur * len * 0.95);
+            lead(barTime + s * stepDur, NOTE[tok], stepDur * len * 0.95, song.leadGain || 0.16, song.leadType || 'brass');
         }
 
         // driving bass 8ths with octave bounce
@@ -206,9 +285,18 @@ const AudioEngine = (() => {
             bassNote(barTime + s * stepDur, s % 2 ? bFreq * 2 : bFreq, stepDur * 0.9);
         }
 
-        // pad chord, whole bar
+        // harmony: sustained pad, or short offbeat stabs
         const [cRoot, cKind] = song.chords[bar];
-        padChord(barTime, chord(cRoot, cKind), stepDur * 8);
+        if (song.chordStyle === 'offbeat') {
+            for (const s of [1, 3, 5, 7]) {
+                padChord(barTime + s * stepDur, chord(cRoot, cKind), stepDur * 0.6, 0.07);
+            }
+        } else {
+            padChord(barTime, chord(cRoot, cKind), stepDur * 8);
+        }
+
+        // stage ambience layer
+        if (song.ambient) song.ambient(barTime, bar, stepDur);
 
         // drums
         for (let s = 0; s < 8; s++) {
@@ -350,7 +438,7 @@ const AudioEngine = (() => {
     return {
         init, resume, toggleMute,
         playMenuTheme: () => playSong(THEME),
-        playBattleTheme: () => playSong(BATTLE),
+        playBattleTheme: (stage = 0) => playSong(STAGE_SONGS[stage] || STAGE_SONGS[0]),
         stopMusic, fanfare,
         sfx: playSfx,
         say,
