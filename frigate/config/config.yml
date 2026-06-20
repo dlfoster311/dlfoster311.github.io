@@ -1,0 +1,281 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Frigate config.yml  —  4-camera setup
+#
+#  DO NOT edit camera IPs or credentials here.
+#  Run ./setup.sh — it writes a .env file and updates this config automatically.
+#
+#  Things to tune after first run (in the Frigate web UI, then paste here):
+#    1. Motion masks — draw over wind chimes, trees, shadows
+#    2. Zones — define your driveway, porch, yard areas
+#    3. Object thresholds — raise min_score if getting false positives
+#
+#  Full reference docs: https://docs.frigate.video/configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── MQTT (optional) ──────────────────────────────────────────────────────────
+# Frigate publishes detection events to MQTT. Useful for Home Assistant.
+# If you don't use MQTT/Home Assistant, set enabled: false.
+mqtt:
+  enabled: true
+  host: mosquitto    # Docker service name — matches docker-compose.yml
+  port: 1883
+  # If you also use a separate MQTT broker (e.g. Home Assistant), change
+  # the host above to its IP and remove the mosquitto service from docker-compose.
+
+
+# ── Detector ─────────────────────────────────────────────────────────────────
+# CPU detection works on any machine. For 4 cameras at 5fps, a modern desktop
+# handles it fine. A Coral USB TPU (~$60) makes it ~10x faster if you want it.
+#
+# If you buy a Google Coral USB (~$60): change type to "edgetpu" and
+# uncomment the device line. Detection will be ~10x faster.
+detectors:
+  cpu1:
+    type: cpu
+    num_threads: 4   # 4 threads for 4 cameras; raise to 6 if your CPU has spare cores
+
+  # ── Coral USB TPU (uncomment to use) ──
+  # coral:
+  #   type: edgetpu
+  #   device: usb
+
+  # ── Intel OpenVINO (for Intel CPUs / integrated GPUs) ──
+  # openvino:
+  #   type: openvino
+  #   device: AUTO
+
+
+# ── go2rtc (built-in stream proxy) ───────────────────────────────────────────
+# Frigate uses go2rtc internally to pull and re-stream your cameras.
+# Add one entry per camera. The key name must match the camera name below.
+#
+# Wyze RTSP URL formats (varies by firmware):
+#   rtsp://user:pass@192.168.1.x/live          (most common)
+#   rtsp://user:pass@192.168.1.x/livestream/12  (some newer firmware)
+#   rtsp://user:pass@192.168.1.x/live           (Wyze Cam v3 + RTSP firmware)
+#
+# You can use env vars from docker-compose.yml:
+#   rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@192.168.1.x/live
+go2rtc:
+  streams:
+
+    # Camera IPs and credentials come from .env — setup.sh fills these in.
+    front_door:
+      - "rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAM1_IP}{FRIGATE_RTSP_PATH}"
+
+    backyard:
+      - "rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAM2_IP}{FRIGATE_RTSP_PATH}"
+
+    front_yard:
+      - "rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAM3_IP}{FRIGATE_RTSP_PATH}"
+
+    side_yard:
+      - "rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAM4_IP}{FRIGATE_RTSP_PATH}"
+
+
+# ── Default settings (applied to every camera unless overridden) ─────────────
+cameras_default: &camera_defaults
+
+  ffmpeg:
+    # Retry connection if the camera drops off the network
+    retry_interval: 10
+
+    # Hardware acceleration for decoding — improves CPU usage significantly.
+    # Comment out if you have problems; plain CPU decode still works fine.
+    # Hardware acceleration — setup.sh sets this automatically based on your GPU.
+    # Default is CPU-only (works on everything). Change to a preset if you have a GPU:
+    #   preset-intel-qsv-h264  (Intel integrated graphics)
+    #   preset-nvidia-h264      (NVIDIA GPU)
+    #   preset-rpi-64-h264      (Raspberry Pi 4/5)
+    hwaccel_args: []
+
+  detect:
+    enabled: true
+    fps: 5      # 5 fps is plenty for detection; saves CPU/disk vs. 10-30 fps
+    # ⚠️  Set this to match your camera's actual stream resolution.
+    # Wyze Cam v3 is 1920×1080; Wyze Cam v2 is 1920×1080 or 1280×720.
+    # Wrong values cause missed detections. Check in Frigate UI → camera → debug.
+    width: 1920
+    height: 1080
+
+  objects:
+    # What Frigate will actively look for and alert on.
+    # "cat" and "dog" are separate labels — Frigate won't call a cat a raccoon.
+    track:
+      - person
+      - cat
+      - dog
+      - car
+
+    filters:
+      # ── Min confidence to even consider it that object (0-1) ──────────────
+      # Raise these if you're getting too many false positives.
+      # Lower them if Frigate is missing real events.
+      person:
+        min_score: 0.60    # reject detections below 60% confidence
+        threshold: 0.70    # must average 70% across frames before alerting
+      cat:
+        min_score: 0.55
+        threshold: 0.65
+      dog:
+        min_score: 0.55
+        threshold: 0.65
+      car:
+        min_score: 0.60
+        threshold: 0.75
+
+  motion:
+    # ── Threshold ─────────────────────────────────────────────────────────────
+    # How much a pixel must change to count as motion (0-255).
+    # Raise this if shadows or wind chimes keep triggering motion.
+    # Default is 25; try 35-50 if you have a windy/shaded area.
+    threshold: 35
+    contour_area: 10    # minimum motion blob size — ignore tiny flickers
+
+    # ── Motion masks ──────────────────────────────────────────────────────────
+    # Use these to completely ignore areas for MOTION detection.
+    # This is the best fix for wind chimes and shadows in a fixed location.
+    #
+    # HOW TO GET COORDINATES:
+    #   1. Open Frigate UI → your camera → Motion Masks
+    #   2. Draw a polygon around the wind chimes / shadow area
+    #   3. Copy the coordinates Frigate shows and paste them below
+    #
+    # Format: comma-separated x,y pairs going around the polygon
+    # Example mask covering top-right corner of a 1920×1080 frame:
+    #   mask:
+    #     - 1500,0,1920,0,1920,400,1500,400
+    mask: []   # ← paste your mask coordinates here after drawing them in the UI
+
+  snapshots:
+    enabled: true
+    bounding_box: true   # draw the detection box on the saved image
+    retain:
+      default: 30        # keep snapshots for 30 days
+
+  record:
+    enabled: true
+    retain:
+      days: 3            # always keep 3 days of continuous footage
+      mode: motion       # "all" = record everything, "motion" = motion-triggered only
+    events:
+      retain:
+        default: 30      # keep event clips for 30 days
+        mode: active_objects  # only keep clips where an object was actually tracked
+
+  # ── Audio detection ───────────────────────────────────────────────────────
+  # Frigate listens to the camera's microphone and alerts on specific sounds.
+  # The audio events flow through the notifier → ntfy just like motion events.
+  #
+  # Supported events (built-in Frigate audio model):
+  #   bark               — dog barking
+  #   fire_alarm         — smoke/CO detector going off
+  #   glass_breaking     — window or glass breaking
+  #   motorcycle         — motorcycle / loud engine
+  #   screaming          — human screaming
+  #   smoke_detector_alarm — smoke/CO alarm (same model as fire_alarm, higher confidence)
+  #   speech             — human speech (use cautiously — chatty cameras)
+  #
+  # Note: Gunshot detection is not in Frigate's default model. If you need it,
+  # a custom audio model can be loaded, but it's an advanced configuration.
+  audio:
+    enabled: true
+    listen:
+      - bark
+      - fire_alarm
+      - glass_breaking
+      - screaming
+      - smoke_detector_alarm
+    # min_volume: 500   # ignore audio below this volume level (0-32767)
+                        # raise if you get false positives from AC/wind noise
+
+  # ── Notifications via ntfy (optional, free, self-hosted or cloud) ─────────
+  # Install the ntfy app on your phone, then uncomment and fill this in.
+  # No account needed — just pick a unique topic name.
+  # notifications:
+  #   enabled: true
+  #   email: ""
+  # (Frigate 0.14+ supports ntfy natively — see docs.frigate.video/notifications)
+
+
+# ── Cameras ───────────────────────────────────────────────────────────────────
+# Camera names and IPs are set by setup.sh.
+# Draw zones in the Frigate UI, then paste the coordinates into each camera below.
+# HOW: Frigate UI → camera → Zones tab → draw polygon → copy coordinates
+cameras:
+
+  front_door:
+    <<: *camera_defaults
+
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/front_door
+          roles: [detect, record]
+
+    zones:
+      # Paste driveway/porch zone coordinates from Frigate UI here.
+      # driveway:
+      #   coordinates: 0,1080,1920,1080,1920,400,0,400
+      #   objects: [person, car]
+      # porch:
+      #   coordinates: 600,1080,1320,1080,1320,600,600,600
+      #   objects: [person]
+
+    # motion:
+    #   mask:
+    #     - x1,y1,x2,y2,...   ← draw in Frigate UI, paste coordinates here
+
+
+  backyard:
+    <<: *camera_defaults
+
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/backyard
+          roles: [detect, record]
+
+    zones:
+      # yard:
+      #   coordinates: 0,1080,1920,1080,1920,0,0,0
+      #   objects: [person, cat, dog]
+
+    # motion:
+    #   mask:
+    #     - x1,y1,x2,y2,...
+
+
+  front_yard:
+    <<: *camera_defaults
+
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/front_yard
+          roles: [detect, record]
+
+    zones:
+      # front_yard_zone:
+      #   coordinates: 0,1080,1920,1080,1920,0,0,0
+      #   objects: [person, car]
+
+    # motion:
+    #   mask:
+    #     - x1,y1,x2,y2,...
+
+
+  side_yard:
+    <<: *camera_defaults
+
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/side_yard
+          roles: [detect, record]
+
+    zones:
+      # side_zone:
+      #   coordinates: 0,1080,1920,1080,1920,0,0,0
+      #   objects: [person]
+
+    # motion:
+    #   mask:
+    #     - x1,y1,x2,y2,...

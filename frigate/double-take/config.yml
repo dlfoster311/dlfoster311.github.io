@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Double-Take configuration
+#  Reference: https://github.com/jakowenko/double-take
+#
+#  Double-Take watches Frigate for person events, sends the snapshot to
+#  DeepStack for face recognition, and publishes the result to MQTT.
+#
+#  After starting: open http://localhost:3000 to train faces.
+# ─────────────────────────────────────────────────────────────────────────────
+
+mqtt:
+  host: mosquitto
+  port: 1883
+
+frigate:
+  url: http://frigate:5000
+  # Re-ID: wait this many seconds after a person event before finalizing.
+  # Gives Frigate time to capture a clear frontal face shot.
+  stop_on_match: true
+
+time:
+  timezone: America/Chicago    # ⚠️ change to your timezone
+                                # e.g. America/New_York, America/Los_Angeles
+                                # Full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+
+detectors:
+  deepstack:
+    url: http://deepstack:5000
+    timeout: 15                 # seconds to wait for face recognition response
+
+detect:
+  match:
+    save: true                  # save matched face crops to disk for review
+    base64: false
+    confidence: 80              # minimum % to consider a positive match
+                                # lower = more matches but more false positives
+                                # raise to 85-90 if you're getting wrong IDs
+  unknown:
+    save: true                  # save unrecognized faces — useful for training
+
+# Camera names must exactly match Frigate's config/config.yml.
+# setup.sh keeps these in sync automatically.
+cameras:
+  front_door:
+    zones: []
+  backyard:
+    zones: []
+  front_yard:
+    zones: []
+  side_yard:
+    zones: []

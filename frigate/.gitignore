@@ -1,0 +1,9 @@
+# Contains your RTSP password and other credentials — never commit this
+.env
+
+# Runtime data
+storage/
+deepstack/
+double-take/
+ntfy/
+scrypted/
